@@ -112,6 +112,9 @@ object YoutubeTranscriptWebView {
                 view.webViewClient = object : WebViewClient() {
                     override fun onPageFinished(view: WebView, pageUrl: String) {
                         Log.d(TAG, "stage=page_finished url=$pageUrl")
+                        view.evaluateJavascript(DEBUG_SCRIPT) { raw ->
+                            Log.d(TAG, "stage=webview_debug data=$raw")
+                        }
                         startPolling()
                     }
 
@@ -166,6 +169,19 @@ object YoutubeTranscriptWebView {
             else -> null
         }
     }
+
+    private const val DEBUG_SCRIPT = """
+        (() => JSON.stringify({
+          url: location.href,
+          title: document.title,
+          player: !!document.querySelector('video, #player, #movie_player, ytm-player'),
+          initial: !!window.ytInitialPlayerResponse,
+          config: !!(window.ytplayer && window.ytplayer.config && window.ytplayer.config.args && window.ytplayer.config.args.player_response),
+          buttons: [...document.querySelectorAll('button, [role="button"], tp-yt-paper-button')].slice(0, 30).map(e => (e.getAttribute('aria-label') || e.textContent || '').trim()).filter(Boolean),
+          segments: document.querySelectorAll('ytd-transcript-segment-renderer, ytm-transcript-segment-renderer, ytm-transcript-segment').length,
+          body: (document.body && document.body.innerText || '').slice(0, 300)
+        }))()
+    """
 
     private const val READ_SCRIPT = """
         (() => {
