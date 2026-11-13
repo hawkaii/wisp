@@ -170,4 +170,10 @@ class ExtractorsTest {
         assertEquals(3, found.lines.size)
         assertEquals("A tiny piece", found.lines.last().text)
     }
+
+    @Test fun youtubeCheapTranscriptKeepsTrackWhenCaptionBodyIsEmpty() {
+        val found = Extractors.youtubeTranscript(fixture("yt_transcript_player.html"), { _, _ -> fixture("yt_transcript_empty.json3") })
+        assertTrue(found.trackFound)
+        assertTrue(found.lines.isEmpty())
+    }
 }

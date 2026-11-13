@@ -3,7 +3,7 @@
 ## Requirements
 
 1. YouTube extraction first fetches the watch page, reads `ytInitialPlayerResponse`, chooses the user's language, English, or the first caption track, then fetches and parses JSON3 or XML captions.
-2. If the cheap caption path cannot read a track, extraction uses an off-screen WebView. It expands the description, opens `Show transcript`, waits up to 20 seconds, and reads timestamped segments without blocking the UI.
+2. If the cheap caption path returns an empty body, an error, or zero parsed segments, extraction uses an off-screen WebView. It loads the English watch page, handles consent, expands the description, tries desktop and mobile `Show transcript` controls, and waits up to 30 seconds. It reads timestamped segments or fetches captions in the page context without blocking the UI.
 3. A note writes transcript lines under `## Transcript` as `**[mm:ss](https://youtu.be/<id>?t=<seconds>)** text`. Small segments merge into sentence-sized lines. `transcript: none` marks videos without captions.
 4. The note screen shows a collapsible Transcript section. Timestamp links open YouTube at that time. `## My notes` remains user-owned.
 5. Pending extraction retries on app open at most three times. After that the queue shows `failed - Retry`. Retry resets the count.
