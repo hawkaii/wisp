@@ -1,4 +1,5 @@
 package app.wispnotes.note
+package app.wispnotes.note
 
 import app.wispnotes.extract.Extracted
 import app.wispnotes.extract.Merge
