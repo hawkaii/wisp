@@ -50,7 +50,7 @@ object Extractors {
         val oembed = youtubeQuick(url, fetch)
         val watchPage = runCatching { fetch(youtubeWatchUrl(url), browser) }.getOrNull()
         val watch = runCatching { youtubeWatch(watchPage) }.getOrDefault(Extracted())
-        val transcript = youtubeTranscript(url, watchPage, fetch, post)
+        val transcript = youtubeTranscriptWithApi(url, watchPage, fetch, post)
         return Extracted(
             title = oembed.title,
             author = oembed.author,
@@ -66,7 +66,7 @@ object Extractors {
     fun youtubeTranscript(html: String?, fetch: Fetch, preferredLanguage: String? = Locale.getDefault().language): app.wispnotes.note.TranscriptResult =
         youtubeTranscript(null, html, fetch, { _, _, _ -> null }, preferredLanguage)
 
-    fun youtubeTranscript(
+    fun youtubeTranscriptWithApi(
         url: String?,
         html: String?,
         fetch: Fetch,

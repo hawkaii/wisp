@@ -165,7 +165,7 @@ class ExtractorsTest {
     @Test fun youtubeInnerTubePrefersEnglishManualCaptions() {
         var requestedCaptionUrl = ""
         var requestedPlayerBody = ""
-        val found = Extractors.youtubeTranscript(
+        val found = Extractors.youtubeTranscriptWithApi(
             "https://www.youtube.com/watch?v=abc",
             null,
             { url, _ -> requestedCaptionUrl = url; fixture("yt_transcript_p.xml") },
