@@ -229,7 +229,12 @@ object YoutubeTranscriptWebView {
           const startCaptionFetch = () => {
             if (window.__wispCaptionFetchStarted) return;
             window.__wispCaptionFetchStarted = true;
-            const player = window.ytInitialPlayerResponse || {};
+            const player = window.ytInitialPlayerResponse || (() => {
+              try {
+                const raw = window.ytplayer && window.ytplayer.config && window.ytplayer.config.args && window.ytplayer.config.args.player_response;
+                return raw ? JSON.parse(raw) : {};
+              } catch (_) { return {}; }
+            })();
             const renderer = player.captions && player.captions.playerCaptionsTracklistRenderer;
             const tracks = (renderer && renderer.captionTracks) || [];
             (async () => {
@@ -253,7 +258,8 @@ object YoutubeTranscriptWebView {
             })();
           };
           clickConsent();
-          const playerReady = !!document.querySelector('video, #player, #movie_player, ytm-player');
+          const hasPlayerResponse = !!(window.ytInitialPlayerResponse && window.ytInitialPlayerResponse.videoDetails) || !!(window.ytplayer && window.ytplayer.config && window.ytplayer.config.args && window.ytplayer.config.args.player_response);
+          const playerReady = !!document.querySelector('video, #player, #movie_player, ytm-player') || hasPlayerResponse;
           if (!playerReady) return window.__wispTranscriptRows || [];
           window.__wispPlayerReady = true;
           expandDescription();
