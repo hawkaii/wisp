@@ -6,13 +6,36 @@ package app.wispnotes.note
  */
 object Sections {
     private const val HEADING = "## Text"
+    private const val TRANSCRIPT = "## Transcript"
     private const val MINE = "## My notes"
 
     // The user's section ends at the next heading the app itself writes. Any other `## ` line is the
     // user's own heading and stays inside their notes, so an edit can never duplicate or cut their text.
-    private val APP_HEADINGS = setOf(HEADING, "## Transcript")
+    private val APP_HEADINGS = setOf(HEADING, TRANSCRIPT)
 
     fun textBlock(text: String) = "$HEADING\n\n${text.trim()}\n"
+
+    /** Writes only the app-owned transcript section. */
+    fun withTranscript(content: String, lines: List<TranscriptLine>, url: String): String {
+        if (lines.isEmpty()) return content
+        val block = buildString {
+            appendLine(TRANSCRIPT)
+            appendLine()
+            lines.forEach { line ->
+                Source.youtubeTimestampUrl(url, line.startSeconds)?.let { link ->
+                    appendLine("**[${formatTranscriptTimestamp(line.startSeconds)}]($link)** ${line.text}")
+                }
+            }
+        }.trimEnd('\n')
+        val raw = content.split("\n")
+        val at = raw.indexOfFirst { it.trimEnd() == TRANSCRIPT }
+        if (at < 0) return content.trimEnd('\n') + "\n\n" + block + "\n"
+        val next = (at + 1 until raw.size).firstOrNull { raw[it].startsWith("## ") } ?: raw.size
+        return (raw.subList(0, at) + block.split("\n") + raw.subList(next, raw.size)).joinToString("\n")
+    }
+
+    fun transcript(content: String): List<TranscriptLine> =
+        TranscriptParser.parseMarkdown(Frontmatter.body(content).substringAfter("$TRANSCRIPT\n", "").substringBefore("\n## "))
 
     /**
      * Adds [text] under `## Text` at the end of the file. If the section already has content
@@ -55,11 +78,15 @@ object Sections {
         return (lines.subList(0, r.first) + block + lines.subList(r.last + 1, lines.size)).joinToString("\n")
     }
 
-    /** The note body to show as Markdown: no frontmatter and no `## My notes` (it has its own editor). */
+    /** The note body to show as Markdown: no frontmatter, `## My notes`, or app transcript. */
     fun readable(content: String): String {
         val body = Frontmatter.body(content).split("\n")
-        val r = mine(body)
-        return (if (r == null) body else body.subList(0, r.first) + body.subList(r.last + 1, body.size))
-            .joinToString("\n").trim()
+        val withoutMine = mine(body)?.let { r -> body.subList(0, r.first) + body.subList(r.last + 1, body.size) } ?: body
+        val transcriptAt = withoutMine.indexOfFirst { it.trimEnd() == TRANSCRIPT }
+        val withoutTranscript = if (transcriptAt < 0) withoutMine else {
+            val next = (transcriptAt + 1 until withoutMine.size).firstOrNull { withoutMine[it].startsWith("## ") } ?: withoutMine.size
+            withoutMine.subList(0, transcriptAt) + withoutMine.subList(next, withoutMine.size)
+        }
+        return withoutTranscript.joinToString("\n").trim()
     }
 }

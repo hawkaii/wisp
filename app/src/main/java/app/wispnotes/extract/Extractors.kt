@@ -1,7 +1,9 @@
 package app.wispnotes.extract
 
 import app.wispnotes.note.Source
+import app.wispnotes.note.TranscriptParser
 import java.net.URLEncoder
+import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -42,14 +44,28 @@ object Extractors {
 
     private fun youtube(url: String, fetch: Fetch): Extracted {
         val oembed = youtubeQuick(url, fetch)
-        val watch = runCatching { youtubeWatch(fetch(youtubeWatchUrl(url), browser)) }.getOrDefault(Extracted())
+        val watchPage = runCatching { fetch(youtubeWatchUrl(url), browser) }.getOrNull()
+        val watch = runCatching { youtubeWatch(watchPage) }.getOrDefault(Extracted())
+        val transcript = youtubeTranscript(watchPage, fetch)
         return Extracted(
             title = oembed.title,
             author = oembed.author,
             thumbnail = oembed.thumbnail,
             minutes = watch.minutes,
             text = watch.text,
+            transcript = transcript.lines,
+            transcriptStatus = if (transcript.trackFound && transcript.lines.isNotEmpty()) "done" else if (!transcript.trackFound) "none" else null,
         )
+    }
+
+    /** Cheap transcript path: watch-page player data, then JSON3 and XML caption bodies. */
+    fun youtubeTranscript(html: String?, fetch: Fetch, preferredLanguage: String? = Locale.getDefault().language): app.wispnotes.note.TranscriptResult {
+        val track = TranscriptParser.captionTrack(html, preferredLanguage) ?: return app.wispnotes.note.TranscriptResult(emptyList(), false)
+        val json3 = runCatching { fetch(TranscriptParser.json3Url(track.baseUrl), browser) }.getOrNull()
+        val body = json3?.takeIf { TranscriptParser.parseCaptionBody(it).isNotEmpty() }
+            ?: runCatching { fetch(track.baseUrl, browser) }.getOrNull()
+        val lines = TranscriptParser.mergeSegments(TranscriptParser.parseCaptionBody(body))
+        return app.wispnotes.note.TranscriptResult(lines, true)
     }
 
     private fun youtubeWatchUrl(url: String): String =

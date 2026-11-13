@@ -19,9 +19,12 @@ object Merge {
         val tags = Frontmatter.tags(content)
         val merged = Frontmatter.mergeTags(tags, Source.detect(url).tags)
         if (merged != tags) set["tags"] = Frontmatter.yamlList(merged) // untouched unless a source tag is missing
-        set["extracted"] = status
-
-        return Sections.withText(Frontmatter.set(content, set), e.text.orEmpty())
+        e.transcriptStatus?.let { set["transcript"] = it }
+        val mergedContent = Frontmatter.set(content, set)
+        return Sections.withTranscript(mergedContent, e.transcript, url).let { withTranscript ->
+            set["extracted"] = status
+            Sections.withText(Frontmatter.set(withTranscript, set), e.text.orEmpty())
+        }
     }
 
     /** The stub title written at share time: empty, the generic fallback, the host or the URL. */

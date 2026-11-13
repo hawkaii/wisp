@@ -63,6 +63,12 @@ class IndexTest {
         assertNull(NoteEntry.parse("n.md", "no frontmatter"))
     }
 
+    @Test fun readsExtractionAttemptsForRetryLimit() {
+        val content = note("https://youtu.be/a", "A video", 10)
+            .replace("extracted: pending", "extracted: pending\nextract_attempts: 2")
+        assertEquals(2, NoteEntry.parse("n.md", content)!!.extractAttempts)
+    }
+
     private fun entry(name: String, minutes: Int?, saved: String = "2026-11-01", status: String = "queued") =
         NoteEntry(name, name, "web", "article", "", status, minutes, null, "", saved, "done")
 

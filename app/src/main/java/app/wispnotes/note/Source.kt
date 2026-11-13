@@ -31,6 +31,24 @@ object Source {
         return base + (if (kept.isEmpty()) "" else "?" + kept.joinToString("&")) + fragment
     }
 
+    fun youtubeId(url: String): String? {
+        val uri = runCatching { URI(url.trim()) }.getOrNull() ?: return null
+        val host = uri.host?.lowercase().orEmpty()
+        val path = uri.path.orEmpty().trim('/').split('/').filter(String::isNotBlank)
+        return when {
+            host == "youtu.be" -> path.firstOrNull()
+            host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com") -> when (path.firstOrNull()) {
+                "watch" -> uri.rawQuery.orEmpty().split('&').firstOrNull { it.startsWith("v=") }?.substringAfter('=')
+                "shorts", "live", "embed", "v" -> path.getOrNull(1)
+                else -> null
+            }
+            else -> null
+        }?.takeIf { it.isNotBlank() }
+    }
+
+    fun youtubeTimestampUrl(url: String, seconds: Int): String? =
+        youtubeId(url)?.let { "https://youtu.be/$it?t=${seconds.coerceAtLeast(0)}" }
+
     fun detect(url: String): SourceInfo {
         val uri = try { URI(url.trim()) } catch (_: Exception) { null }
         val host = uri?.host?.lowercase()?.removePrefix("www.")?.removePrefix("m.") ?: ""

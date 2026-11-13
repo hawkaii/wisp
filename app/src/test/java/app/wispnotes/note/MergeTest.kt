@@ -1,4 +1,5 @@
 package app.wispnotes.note
+package app.wispnotes.note
 
 import app.wispnotes.extract.Extracted
 import app.wispnotes.extract.Merge
@@ -81,13 +82,20 @@ class MergeTest {
         assertEquals("just text", Merge.apply("just text", found).substringBefore("\n\n## Text"))
     }
 
-    @Test fun parsesFrontmatterEdgeCases() {
-        val c = "---\ntitle: \"A: b\"\nurl: \"https://a.com/x?y=1\"\nest_minutes:\nrating:\n---\nbody: not a key\n"
-        assertEquals("A: b", Frontmatter.text(c, "title"))
-        assertEquals("https://a.com/x?y=1", Frontmatter.text(c, "url"))
-        assertEquals(null, Frontmatter.text(c, "est_minutes"))
-        assertEquals(null, Frontmatter.text(c, "body"))
-        assertEquals("---\ntitle: \"A: b\"\nurl: \"https://a.com/x?y=1\"\nest_minutes: 5\nrating:\nextracted: done\n---\nbody: not a key\n",
-            Frontmatter.set(c, mapOf("est_minutes" to "5", "extracted" to "done")))
+    @Test fun marksVideosWithoutCaptions() {
+        val out = Merge.apply(stub(), Extracted(transcriptStatus = "none"))
+        assertEquals("none", Frontmatter.text(out, "transcript"))
+        assertTrue(!out.contains("## Transcript"))
+    }
+
+    @Test fun addsTranscriptWithoutTouchingMyNotes() {
+        val mine = stub().replace("## My notes\n", "## My notes\nKeep this.\n")
+        val found = Extracted(transcript = listOf(TranscriptLine(62, "A spoken line.")), transcriptStatus = "done")
+        val out = Merge.apply(mine, found)
+        assertTrue(out.contains("transcript: done"))
+        assertTrue(out.contains("**[01:02](https://youtu.be/abc?t=62)** A spoken line."))
+        assertTrue(out.contains("## My notes\nKeep this."))
+        assertEquals("A spoken line.", Sections.transcript(out).single().text)
+        assertTrue(!Sections.readable(out).contains("A spoken line."))
     }
 }

@@ -162,4 +162,12 @@ class ExtractorsTest {
         // Page with no usable tags at all.
         assertEquals("failed", Extractors.extract("https://www.imdb.com/title/tt1/") { _, _ -> "<html></html>" }.status)
     }
+    @Test fun youtubeCheapTranscriptUsesCaptionFixture() {
+        val found = Extractors.youtubeTranscript(fixture("yt_transcript_player.html"), { url, _ ->
+            if ("fmt=json3" in url) fixture("yt_transcript.json3") else null
+        })
+        assertTrue(found.trackFound)
+        assertEquals(3, found.lines.size)
+        assertEquals("A tiny piece", found.lines.last().text)
+    }
 }

@@ -13,6 +13,7 @@ import androidx.work.workDataOf
 import app.wispnotes.index.NoteEntry
 import app.wispnotes.index.WispDb
 import app.wispnotes.note.Frontmatter
+import app.wispnotes.note.Source
 import app.wispnotes.vault.SafVaultRepository
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -25,10 +26,27 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         val repo = SafVaultRepository(applicationContext)
         val current = repo.editInboxNote(name) { it }.getOrElse { return Result.failure() }
         val url = Frontmatter.text(current, "url") ?: return Result.failure()
+        val attempts = Frontmatter.text(current, "extract_attempts")?.toIntOrNull() ?: 0
+        if (attempts >= MAX_ATTEMPTS) {
+            val failed = repo.editInboxNote(name) { Frontmatter.set(it, mapOf("extracted" to "failed")) }
+                .getOrElse { return Result.failure() }
+            NoteEntry.parse(name, failed)?.let { WispDb.get(applicationContext).notes().put(it) }
+            return Result.success()
+        }
+        val nextAttempt = attempts + 1
+        repo.editInboxNote(name) { Frontmatter.set(it, mapOf("extract_attempts" to nextAttempt.toString())) }
+            .getOrElse { return Result.failure() }
 
-        val found = withContext(Dispatchers.IO) { Extractors.extract(url, OkHttpFetcher::get) }
+        var found = withContext(Dispatchers.IO) { Extractors.extract(url, OkHttpFetcher::get) }
+        if (Source.detect(url).source == "youtube" && found.transcript.isEmpty() && found.transcriptStatus == null) {
+            val fallback = YoutubeTranscriptWebView.fetch(applicationContext, url)
+            found = found.copy(
+                transcript = fallback.orEmpty(),
+                transcriptStatus = if (fallback.isNullOrEmpty()) "none" else "done",
+            )
+        }
         // Nothing found: try again (offline, slow server) before recording "failed".
-        if (found.status == "failed" && runAttemptCount < MAX_RETRIES) return Result.retry()
+        if (found.status == "failed" && nextAttempt < MAX_ATTEMPTS) return Result.retry()
 
         val updated = repo.editInboxNote(name) { Merge.apply(it, found) }.getOrElse { return Result.failure() }
         NoteEntry.parse(name, updated)?.let { WispDb.get(applicationContext).notes().put(it) }
@@ -37,15 +55,19 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
 
     companion object {
         private const val KEY_FILE = "file"
-        private const val MAX_RETRIES = 2
+        private const val MAX_ATTEMPTS = 3
 
-        fun enqueue(context: Context, fileName: String) {
+        fun enqueue(context: Context, fileName: String, replace: Boolean = false) {
             val request = OneTimeWorkRequestBuilder<ExtractWorker>()
                 .setInputData(workDataOf(KEY_FILE to fileName))
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork("extract-$fileName", ExistingWorkPolicy.KEEP, request)
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "extract-$fileName",
+                if (replace) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP,
+                request,
+            )
         }
     }
 }

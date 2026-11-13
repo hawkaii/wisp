@@ -24,6 +24,7 @@ data class NoteEntry(
     val finished: String? = null,
     val nextReview: String? = null,
     val reviewStep: Int? = null,
+    val extractAttempts: Int = 0,
     /** Text after the frontmatter, for search. shortcut: capped, long transcripts are searched only in their first part. */
     val body: String = "",
 ) {
@@ -54,6 +55,7 @@ data class NoteEntry(
                 finished = Frontmatter.text(content, "finished"),
                 nextReview = Frontmatter.text(content, "next_review"),
                 reviewStep = Frontmatter.text(content, "review_step")?.toIntOrNull(),
+                extractAttempts = Frontmatter.text(content, "extract_attempts")?.toIntOrNull() ?: 0,
                 body = Frontmatter.body(content).take(MAX_BODY),
             )
         }

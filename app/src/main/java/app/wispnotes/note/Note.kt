@@ -35,6 +35,7 @@ object Note {
         appendLine("rating:")
         appendLine("tags: [${d.info.tags.joinToString(", ")}]")
         appendLine("extracted: pending")
+        appendLine("transcript: pending")
         appendLine("---")
         appendLine()
         appendLine("## My notes")
