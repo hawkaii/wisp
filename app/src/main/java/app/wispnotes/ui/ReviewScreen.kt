@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -39,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -51,8 +53,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.wispnotes.note.Publish
 import app.wispnotes.note.Recall
 import app.wispnotes.note.Review
+import app.wispnotes.R
 import app.wispnotes.ui.theme.WispCard
 import app.wispnotes.ui.theme.WispColors
+import app.wispnotes.ui.theme.WispPanel
 import java.time.LocalDate
 
 /** Review = done notes that are due. Recall first (text box), then the note is revealed, then Remembered / Fuzzy / Forgot. */
@@ -73,7 +77,10 @@ fun ReviewScreen(vm: LibraryViewModel = viewModel()) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Review", style = MaterialTheme.typography.headlineMedium)
-            if (due.isNotEmpty()) Flame(24.dp)
+            androidx.compose.material3.Icon(painterResource(R.drawable.stk_calendar), null, tint = Color.Unspecified, modifier = Modifier.size(32.dp))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            repeat(3) { i -> Box(Modifier.size(14.dp).clip(RoundedCornerShape(50)).background(if (i == 0) WispColors.Pumpkin else WispColors.Ink).border(2.dp, Color.Black, RoundedCornerShape(50))) }
         }
         ReminderAsk()
         val entry = due.firstOrNull()
@@ -102,7 +109,7 @@ fun ReviewScreen(vm: LibraryViewModel = viewModel()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(entry.title, style = MaterialTheme.typography.titleMedium)
                     Text("What do you remember?", color = WispColors.Haze)
-                    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WispColors.Ink).padding(12.dp)) {
+                    WispPanel(Modifier.fillMaxWidth()) {
                         BasicTextField(
                             value = recall,
                             onValueChange = { if (!revealed) recall = it },
@@ -159,7 +166,7 @@ private fun ReminderAsk() {
             Text("Want a nudge when a note is ready to revisit?", style = MaterialTheme.typography.titleMedium)
             Text("One quiet reminder a day, only when something is due. Review works without it.", color = WispColors.Lavender)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                WispButton("Allow reminders", { launcher.launch(Manifest.permission.POST_NOTIFICATIONS) })
+                WispButton("Allow reminders", { launcher.launch(Manifest.permission.POST_NOTIFICATIONS) }, compact = true)
                 WispChip("Not now", onClick = { done() })
             }
         }
