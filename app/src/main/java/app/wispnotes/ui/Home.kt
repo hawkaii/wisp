@@ -131,7 +131,7 @@ fun HomeScreen(shared: Shared?, onOpen: (String) -> Unit, onSettings: () -> Unit
                 shown.isEmpty() -> Empty("No match.", "Try another word, or clear the filter.")
                 else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
                     itemsIndexed(shown, key = { _, e -> e.fileName }) { i, e ->
-                        QueueCard(e, shared, onOpen = { onOpen(e.fileName) }, onArchive = { vm.archive(e) }, modifier = Modifier.animateItem().staggerIn(i))
+                        QueueCard(e, shared, onOpen = { onOpen(e.fileName) }, onRetry = { vm.retry(e) }, onArchive = { vm.archive(e) }, modifier = Modifier.animateItem().staggerIn(i))
                     }
                 }
             }
@@ -173,7 +173,7 @@ fun Empty(headline: String, body: String) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QueueCard(entry: NoteEntry, shared: Shared?, onOpen: () -> Unit, onArchive: () -> Unit, modifier: Modifier = Modifier) {
+private fun QueueCard(entry: NoteEntry, shared: Shared?, onOpen: () -> Unit, onRetry: () -> Unit, onArchive: () -> Unit, modifier: Modifier = Modifier) {
     val state = rememberSwipeToDismissBoxState(
         confirmValueChange = {
             if (it == SwipeToDismissBoxValue.EndToStart) { onArchive(); true } else false
@@ -189,11 +189,11 @@ private fun QueueCard(entry: NoteEntry, shared: Shared?, onOpen: () -> Unit, onA
                 contentAlignment = Alignment.CenterEnd,
             ) { Text("Archive", style = MaterialTheme.typography.labelLarge) }
         },
-    ) { CardBody(entry, shared, onOpen) }
+    ) { CardBody(entry, shared, onOpen, onRetry) }
 }
 
 @Composable
-private fun CardBody(entry: NoteEntry, shared: Shared?, onOpen: () -> Unit) {
+private fun CardBody(entry: NoteEntry, shared: Shared?, onOpen: () -> Unit, onRetry: () -> Unit) {
     WispCard(Modifier.noteBounds(shared, entry.fileName).fillMaxWidth().pressable(onClick = onOpen), color = WispColors.Ink) {
         Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             val thumb = Modifier.size(76.dp).clip(RoundedCornerShape(14.dp)).border(2.dp, WispColors.Void, RoundedCornerShape(14.dp))
@@ -208,6 +208,9 @@ private fun CardBody(entry: NoteEntry, shared: Shared?, onOpen: () -> Unit) {
                     WispChip(entry.source)
                     if (entry.status == "in-progress") WispChip("In progress", selected = true)
                     Text(minutesLabel(entry), color = WispColors.Lavender, style = MaterialTheme.typography.labelMedium)
+                }
+                if (entry.extracted == "pending") {
+                    WispButton("Retry", onRetry, compact = true)
                 }
             }
         }

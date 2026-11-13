@@ -67,4 +67,6 @@ object Indexer {
     suspend fun rescan(read: suspend () -> List<RawNote>, replace: suspend (List<NoteEntry>) -> Unit) {
         replace(read().mapNotNull { NoteEntry.parse(it.fileName, it.content) })
     }
+
+    fun pending(entries: List<NoteEntry>): List<NoteEntry> = entries.filter { it.extracted == "pending" }
 }
