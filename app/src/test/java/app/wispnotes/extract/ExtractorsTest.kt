@@ -162,6 +162,26 @@ class ExtractorsTest {
         // Page with no usable tags at all.
         assertEquals("failed", Extractors.extract("https://www.imdb.com/title/tt1/") { _, _ -> "<html></html>" }.status)
     }
+    @Test fun youtubeInnerTubePrefersEnglishManualCaptions() {
+        var requestedCaptionUrl = ""
+        var requestedPlayerBody = ""
+        val found = Extractors.youtubeTranscript(
+            "https://www.youtube.com/watch?v=abc",
+            null,
+            { url, _ -> requestedCaptionUrl = url; fixture("yt_transcript_p.xml") },
+            { _, headers, body ->
+                assertEquals("com.google.android.youtube/20.10.38 (Linux; U; Android 14)", headers["User-Agent"])
+                requestedPlayerBody = body
+                fixture("yt_player_android.json")
+            },
+            preferredLanguage = "de-DE",
+        )
+        assertTrue(requestedPlayerBody.contains("\"clientName\":\"ANDROID\""))
+        assertTrue(requestedCaptionUrl.contains("lang=en&kind=manual"))
+        assertEquals(2, found.lines.size)
+        assertEquals("Hello from the talk. This is spoken text.", found.lines.first().text)
+    }
+
     @Test fun youtubeCheapTranscriptUsesCaptionFixture() {
         val found = Extractors.youtubeTranscript(fixture("yt_transcript_player.html"), { url, _ ->
             if ("fmt=json3" in url) fixture("yt_transcript.json3") else null

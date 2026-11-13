@@ -15,14 +15,18 @@ import org.jsoup.nodes.Document
  */
 object Extractors {
     private const val BROWSER_UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36"
+    private const val YOUTUBE_API_URL = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
+    private const val YOUTUBE_ANDROID_UA = "com.google.android.youtube/20.10.38 (Linux; U; Android 14)"
+    private const val YOUTUBE_ANDROID_VERSION = "20.10.38"
+    private const val YOUTUBE_IOS_VERSION = "20.10.3"
     private const val FACEBOOK_UA = "facebookexternalhit/1.1"
     private val browser = mapOf("User-Agent" to BROWSER_UA, "Cookie" to "CONSENT=YES+1")
     private const val MAX_TEXT = 50_000
 
     /** Never throws: any failure is an empty result, which the note records as `extracted: failed`. */
-    fun extract(url: String, fetch: Fetch): Extracted = try {
+    fun extract(url: String, fetch: Fetch, post: Post = { _, _, _ -> null }): Extracted = try {
         when (Source.detect(url).source) {
-            "youtube" -> youtube(url, fetch)
+            "youtube" -> youtube(url, fetch, post)
             "instagram" -> instagram(fetch(url, mapOf("User-Agent" to FACEBOOK_UA)))
             "x" -> x(fetch("https://publish.twitter.com/oembed?omit_script=1&url=${enc(url)}", emptyMap()))
             "reddit" -> reddit(fetch(redditJsonUrl(url), mapOf("User-Agent" to "android:app.wispnotes:0.2")))
@@ -42,11 +46,11 @@ object Extractors {
         runCatching { youtubeOembed(fetch("https://www.youtube.com/oembed?format=json&url=${enc(url)}", emptyMap())) }
             .getOrDefault(Extracted())
 
-    private fun youtube(url: String, fetch: Fetch): Extracted {
+    private fun youtube(url: String, fetch: Fetch, post: Post): Extracted {
         val oembed = youtubeQuick(url, fetch)
         val watchPage = runCatching { fetch(youtubeWatchUrl(url), browser) }.getOrNull()
         val watch = runCatching { youtubeWatch(watchPage) }.getOrDefault(Extracted())
-        val transcript = youtubeTranscript(watchPage, fetch)
+        val transcript = youtubeTranscript(url, watchPage, fetch, post)
         return Extracted(
             title = oembed.title,
             author = oembed.author,
@@ -58,15 +62,47 @@ object Extractors {
         )
     }
 
-    /** Cheap transcript path: watch-page player data, then JSON3 and XML caption bodies. */
-    fun youtubeTranscript(html: String?, fetch: Fetch, preferredLanguage: String? = Locale.getDefault().language): app.wispnotes.note.TranscriptResult {
-        val track = TranscriptParser.captionTrack(html, preferredLanguage) ?: return app.wispnotes.note.TranscriptResult(emptyList(), false)
-        val json3 = runCatching { fetch(TranscriptParser.json3Url(track.baseUrl), browser) }.getOrNull()
-        val body = json3?.takeIf { TranscriptParser.parseCaptionBody(it).isNotEmpty() }
-            ?: runCatching { fetch(track.baseUrl, browser) }.getOrNull()
-        val lines = TranscriptParser.mergeSegments(TranscriptParser.parseCaptionBody(body))
-        return app.wispnotes.note.TranscriptResult(lines, true)
+    /** Primary transcript path: InnerTube player data, then captions from its selected track. */
+    fun youtubeTranscript(html: String?, fetch: Fetch, preferredLanguage: String? = Locale.getDefault().language): app.wispnotes.note.TranscriptResult =
+        youtubeTranscript(null, html, fetch, { _, _, _ -> null }, preferredLanguage)
+
+    fun youtubeTranscript(
+        url: String?,
+        html: String?,
+        fetch: Fetch,
+        post: Post,
+        preferredLanguage: String? = Locale.getDefault().language,
+    ): app.wispnotes.note.TranscriptResult {
+        val videoId = Source.youtubeId(url.orEmpty()) ?: TranscriptParser.videoId(html)
+        val apiPlayer = videoId?.let { fetchPlayer(it, post) }
+        val track = TranscriptParser.captionTrackFromJson(apiPlayer, preferredLanguage)
+            ?: TranscriptParser.captionTrack(html, preferredLanguage)
+            ?: return app.wispnotes.note.TranscriptResult(emptyList(), false)
+        val headers = if (apiPlayer != null) mapOf("User-Agent" to YOUTUBE_ANDROID_UA) else browser
+        val bodies = listOfNotNull(
+            runCatching { fetch(track.baseUrl, headers) }.getOrNull(),
+            runCatching { fetch(TranscriptParser.json3Url(track.baseUrl), headers) }.getOrNull(),
+        )
+        val segments = bodies.asSequence().map { TranscriptParser.parseCaptionBody(it) }.firstOrNull { it.isNotEmpty() }.orEmpty()
+        return app.wispnotes.note.TranscriptResult(TranscriptParser.mergeSegments(segments), true)
     }
+
+    private fun fetchPlayer(videoId: String, post: Post): String? {
+        val android = post(YOUTUBE_API_URL, mapOf("User-Agent" to YOUTUBE_ANDROID_UA, "Content-Type" to "application/json"), playerBody("ANDROID", YOUTUBE_ANDROID_VERSION, videoId))
+        if (TranscriptParser.hasCaptionTracks(android)) return android
+        val ios = post(YOUTUBE_API_URL, mapOf("Content-Type" to "application/json"), playerBody("IOS", YOUTUBE_IOS_VERSION, videoId))
+        return ios?.takeIf(TranscriptParser::hasCaptionTracks)
+    }
+
+    private fun playerBody(clientName: String, clientVersion: String, videoId: String): String =
+        JSONObject().apply {
+            put("context", JSONObject().put("client", JSONObject().apply {
+                put("clientName", clientName)
+                put("clientVersion", clientVersion)
+            }))
+            put("videoId", videoId)
+        }.toString()
+
 
     private fun youtubeWatchUrl(url: String): String =
         if (runCatching { java.net.URI(url).host.orEmpty().contains("music.youtube.com") }.getOrDefault(false)) {

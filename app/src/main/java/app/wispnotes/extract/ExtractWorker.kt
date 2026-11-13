@@ -38,7 +38,7 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         repo.editInboxNote(name) { Frontmatter.set(it, mapOf("extract_attempts" to nextAttempt.toString())) }
             .getOrElse { return Result.failure() }
 
-        var found = withContext(Dispatchers.IO) { Extractors.extract(url, OkHttpFetcher::get) }
+        var found = withContext(Dispatchers.IO) { Extractors.extract(url, OkHttpFetcher::get, OkHttpFetcher::post) }
         Log.d(TAG, "stage=fast_path status=${found.status} transcript_status=${found.transcriptStatus} count=${found.transcript.size}")
         if (Source.detect(url).source == "youtube" && found.transcriptStatus != "done") {
             Log.d(TAG, "stage=webview_start reason=fast_path_incomplete")
