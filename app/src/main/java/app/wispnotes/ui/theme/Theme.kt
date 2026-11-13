@@ -14,6 +14,7 @@ import android.provider.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,11 +88,13 @@ fun WispTheme(content: @Composable () -> Unit) {
         onPauseOrDispose {}
     }
     CompositionLocalProvider(LocalReduceMotion provides reduce) {
-        MaterialTheme(colorScheme = Scheme, typography = WispTypography, shapes = WispShapes, content = content)
+        MaterialTheme(colorScheme = Scheme, typography = WispTypography, shapes = WispShapes) {
+            CompositionLocalProvider(LocalContentColor provides Color.White, content = content)
+        }
     }
 }
 
-val Outline = BorderStroke(3.dp, WispColors.Void)
+val Outline = BorderStroke(3.dp, Color.Black)
 
 /** Flat sticker card: thick dark outline and a hard drop edge, no blur. */
 @Composable
