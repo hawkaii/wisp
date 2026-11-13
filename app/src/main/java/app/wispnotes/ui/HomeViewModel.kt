@@ -30,12 +30,17 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     fun rescan() = viewModelScope.launch {
         Indexer.rescan({ repo.listInboxNotes() }) { entries ->
             dao.replaceAll(entries)
-            Indexer.pending(entries).forEach { ExtractWorker.enqueue(getApplication(), it.fileName) }
+            Indexer.pending(entries).forEach { ExtractWorker.enqueue(getApplication(), it.fileName, replace = true) }
         }
     }
 
-    fun retry(entry: NoteEntry) {
-        ExtractWorker.enqueue(getApplication(), entry.fileName)
+    fun retry(entry: NoteEntry) = viewModelScope.launch {
+        repo.editInboxNote(entry.fileName) {
+            Frontmatter.set(it, mapOf("extracted" to "pending", "extract_attempts" to "0"))
+        }.onSuccess {
+            dao.put(entry.copy(extracted = "pending", extractAttempts = 0))
+            ExtractWorker.enqueue(getApplication(), entry.fileName, replace = true)
+        }
     }
 
     fun start(entry: NoteEntry) = viewModelScope.launch {

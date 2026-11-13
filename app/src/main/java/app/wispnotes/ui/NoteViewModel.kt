@@ -8,6 +8,7 @@ import app.wispnotes.index.WispDb
 import app.wispnotes.note.Frontmatter
 import app.wispnotes.note.Review
 import app.wispnotes.note.Sections
+import app.wispnotes.note.TranscriptLine
 import app.wispnotes.vault.SafVaultRepository
 import java.time.LocalDate
 import kotlinx.coroutines.Job
@@ -19,7 +20,14 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-data class NoteUi(val fileName: String, val entry: NoteEntry, val author: String?, val body: String)
+data class NoteUi(
+    val fileName: String,
+    val entry: NoteEntry,
+    val author: String?,
+    val body: String,
+    val transcript: List<TranscriptLine>,
+    val transcriptStatus: String?,
+)
 
 /** The open note: loads the file, autosaves `## My notes` (debounced), moves status, finishes with a rating. */
 class NoteViewModel(app: Application) : AndroidViewModel(app) {
@@ -47,7 +55,14 @@ class NoteViewModel(app: Application) : AndroidViewModel(app) {
         val entry = NoteEntry.parse(fileName, content)
         if (entry == null) { missing.value = true; return }
         if (resetNotes) notes.value = Sections.myNotes(content)
-        ui.value = NoteUi(fileName, entry, Frontmatter.text(content, "author"), Sections.readable(content))
+        ui.value = NoteUi(
+            fileName = fileName,
+            entry = entry,
+            author = Frontmatter.text(content, "author"),
+            body = Sections.readable(content),
+            transcript = Sections.transcript(content),
+            transcriptStatus = Frontmatter.text(content, "transcript"),
+        )
         dao.put(entry) // lists update at once
     }
 

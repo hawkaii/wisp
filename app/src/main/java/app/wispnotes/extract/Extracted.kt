@@ -1,5 +1,7 @@
 package app.wispnotes.extract
 
+import app.wispnotes.note.TranscriptLine
+
 /** What an extractor found. Every field is optional: pages give what they give. */
 data class Extracted(
     val title: String? = null,
@@ -7,12 +9,15 @@ data class Extracted(
     val thumbnail: String? = null,
     val minutes: Int? = null,
     val text: String? = null,
+    val transcript: List<TranscriptLine> = emptyList(),
+    /** `done` has lines, `none` has no captions, null still needs the WebView fallback. */
+    val transcriptStatus: String? = null,
 ) {
     /** done: a title and a length or text. partial: something. failed: nothing (link only). */
     val status: String
         get() = when {
             title != null && (text != null || minutes != null) -> "done"
-            title != null || author != null || thumbnail != null || minutes != null || text != null -> "partial"
+            title != null || author != null || thumbnail != null || minutes != null || text != null || transcript.isNotEmpty() -> "partial"
             else -> "failed"
         }
 }

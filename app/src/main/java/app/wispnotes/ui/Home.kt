@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -85,7 +86,7 @@ fun HomeScreen(
         }
         Text("Your pot", style = MaterialTheme.typography.headlineMedium)
         PotCard(all)
-        WispButton("What now?", onWhatNow, Modifier.height(64.dp))
+        WispButton("What now?", onWhatNow, Modifier.height(64.dp), leadingIcon = R.drawable.stk_ghost)
         if (all.isEmpty()) {
             Empty("Nothing queued yet.", "Share a link to Wisp from any app. It lands here as a note.")
         } else {
@@ -110,7 +111,7 @@ private fun PotCard(entries: List<NoteEntry>) {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.size(150.dp), contentAlignment = Alignment.Center) {
                         Icon(painterResource(R.drawable.stk_cauldron), null, tint = Color.Unspecified, modifier = Modifier.fillMaxSize())
-                        Text(entries.size.toString(), style = MaterialTheme.typography.titleMedium, color = Color.White)
+                        Text(entries.size.toString(), style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.offset(y = 18.dp))
                     }
                     Text("${entries.size} brewing", style = MaterialTheme.typography.titleMedium)
                     Text(totalMinutes(minutes), color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall)
@@ -121,7 +122,7 @@ private fun PotCard(entries: List<NoteEntry>) {
     }
 }
 
-private fun totalMinutes(minutes: Int): String = "about ${minutes / 60} h ${minutes % 60} min"
+private fun totalMinutes(minutes: Int): String = if (minutes < 60) "about $minutes min" else "about ${minutes / 60} h ${minutes % 60} min"
 
 @Composable
 private fun QueueRow(entry: NoteEntry, onOpen: () -> Unit, onRetry: () -> Unit) {
@@ -133,7 +134,7 @@ private fun QueueRow(entry: NoteEntry, onOpen: () -> Unit, onRetry: () -> Unit) 
         Box(Modifier.size(12.dp).clip(RoundedCornerShape(50)).background(WispColors.Pumpkin).border(2.dp, Color.Black, RoundedCornerShape(50)))
         Text(entry.title, style = MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         Text(minutesLabel(entry), color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall)
-        if (entry.extracted == "pending") WispButton("Retry", onRetry, compact = true)
+        if (entry.extracted == "pending" || entry.extracted == "failed") WispButton("Retry", onRetry, compact = true)
     }
 }
 
@@ -207,7 +208,7 @@ fun WhatNowScreen(onBack: () -> Unit, vm: HomeViewModel = viewModel()) {
         if (picks.size > 1) {
             WispCard(Modifier.fillMaxWidth(), color = WispColors.Ink) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
-                    picks.drop(1).forEach { entry -> QueueRow(entry, onOpen = { uriHandler.openUri(entry.url) }, onRetry = {}) }
+                    picks.drop(1).forEach { entry -> QueueRow(entry, onOpen = { uriHandler.openUri(entry.url) }, onRetry = { vm.retry(entry) }) }
                 }
             }
         }
@@ -237,6 +238,7 @@ private fun PickCard(entry: NoteEntry, onOpen: () -> Unit) {
 
 private fun minutesLabel(e: NoteEntry) = when {
     e.estMinutes != null -> "~${e.estMinutes} min"
+    e.extracted == "failed" -> "failed - Retry"
     e.extracted == "pending" -> "reading…"
     else -> "? min"
 }

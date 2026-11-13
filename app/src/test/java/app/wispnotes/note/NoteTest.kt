@@ -62,11 +62,18 @@ class NoteTest {
             rating:
             tags: [video, youtube]
             extracted: pending
+            transcript: pending
             ---
 
             ## My notes
 
         """.trimIndent() + "\n"
         assertEquals(expected, Note.render(d))
+    }
+
+    @Test fun timestampLinksUseTheVideoId() {
+        assertEquals("abc", Source.youtubeId("https://www.youtube.com/watch?v=abc"))
+        assertEquals("https://youtu.be/abc?t=62", Source.youtubeTimestampUrl("https://youtu.be/abc", 62))
+        assertEquals("short", Source.youtubeId("https://youtube.com/shorts/short"))
     }
 }

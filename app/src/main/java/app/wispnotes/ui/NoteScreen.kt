@@ -57,6 +57,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.wispnotes.index.NoteEntry
 import app.wispnotes.note.Publish
 import app.wispnotes.note.Review
+import app.wispnotes.note.Source
+import app.wispnotes.note.TranscriptLine
+import app.wispnotes.note.formatTranscriptTimestamp
 import app.wispnotes.note.parseMarkdown
 import app.wispnotes.ui.theme.LocalReduceMotion
 import app.wispnotes.ui.theme.WispCard
@@ -123,6 +126,9 @@ fun NoteScreen(fileName: String, shared: Shared?, onBack: () -> Unit, vm: NoteVi
                         }
                     }
                     item { MyNotes(notes, vm::onNotes) }
+                    if (note.transcriptStatus != null && note.transcriptStatus != "pending") {
+                        item { TranscriptSection(e.url, note.transcript, note.transcriptStatus, uriHandler) }
+                    }
                     items(blocks) { MdLineView(it) }
                     item { Spacer(Modifier.height(24.dp)) }
                 }
@@ -266,6 +272,46 @@ private fun PublishPreview(draft: String) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             WispChip("Preview only · nothing is published", selected = true)
             parseMarkdown(draft.take(shown)).forEach { MdLineView(it) }
+        }
+    }
+}
+
+@Composable
+private fun TranscriptSection(
+    url: String,
+    lines: List<TranscriptLine>,
+    status: String?,
+    uriHandler: androidx.compose.ui.platform.UriHandler,
+) {
+    var expanded by rememberSaveable(url) { mutableStateOf(true) }
+    WispCard(Modifier.fillMaxWidth(), color = WispColors.Ink) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.fillMaxWidth().pressable(onClick = { expanded = !expanded }),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Transcript", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Text(if (expanded) "−" else "+", color = WispColors.Lavender, fontSize = 24.sp)
+            }
+            if (expanded) {
+                if (status == "none" || lines.isEmpty()) {
+                    Text("No transcript found.", color = WispColors.Lavender)
+                } else {
+                    lines.forEach { line ->
+                        val target = Source.youtubeTimestampUrl(url, line.startSeconds)
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                            Text(
+                                formatTranscriptTimestamp(line.startSeconds),
+                                color = WispColors.Pumpkin,
+                                modifier = Modifier
+                                    .semantics { contentDescription = "Open at ${formatTranscriptTimestamp(line.startSeconds)}" }
+                                    .pressable(enabled = target != null) { target?.let(uriHandler::openUri) },
+                            )
+                            Text(line.text, Modifier.padding(start = 10.dp), color = Color.White)
+                        }
+                    }
+                }
+            }
         }
     }
 }
