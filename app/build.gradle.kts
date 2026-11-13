@@ -13,7 +13,7 @@ android {
         applicationId = "app.wispnotes"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 3
         versionName = "0.3.0" // CI reads this for the release tag and APK name
     }
 

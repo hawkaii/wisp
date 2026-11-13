@@ -82,7 +82,6 @@ fun ReviewScreen(vm: LibraryViewModel = viewModel()) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             repeat(3) { i -> Box(Modifier.size(14.dp).clip(RoundedCornerShape(50)).background(if (i == 0) WispColors.Pumpkin else WispColors.Ink).border(2.dp, Color.Black, RoundedCornerShape(50))) }
         }
-        ReminderAsk()
         val entry = due.firstOrNull()
         if (notes == null) return@Column
         if (entry == null) {
@@ -97,6 +96,7 @@ fun ReviewScreen(vm: LibraryViewModel = viewModel()) {
                     )
                 }
             }
+            if (notes.any { it.status == "done" }) ReminderAsk()
             return@Column
         }
         Text("${due.size} to revisit", color = WispColors.Lavender)
@@ -143,6 +143,7 @@ fun ReviewScreen(vm: LibraryViewModel = viewModel()) {
                 }
             }
         }
+        if (notes.any { it.status == "done" }) ReminderAsk()
         Spacer(Modifier.padding(8.dp))
     }
 }

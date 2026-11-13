@@ -1,11 +1,14 @@
 package app.wispnotes.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -17,7 +20,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -27,6 +33,7 @@ import app.wispnotes.index.NoteSearch
 import app.wispnotes.note.Publish
 import app.wispnotes.ui.theme.WispCard
 import app.wispnotes.ui.theme.WispColors
+import coil.compose.AsyncImage
 
 /** Notes = the library: every note grouped by status, with search, tag chips and a rating filter. */
 @Composable
@@ -80,11 +87,20 @@ fun NotesScreen(onOpen: (String) -> Unit, vm: LibraryViewModel = viewModel()) {
 @Composable
 private fun NoteRow(e: NoteEntry, onOpen: () -> Unit, modifier: Modifier) {
     WispCard(modifier.fillMaxWidth().pressable(onClick = onOpen), color = WispColors.Ink) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(e.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                WispChip(e.source)
-                e.rating?.let { Text(Publish.stars(it), color = WispColors.Pumpkin) }
+        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            val thumb = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp))
+            if (e.thumbnail != null) {
+                AsyncImage(e.thumbnail, "Thumbnail", contentScale = ContentScale.Crop, modifier = thumb)
+            } else {
+                Box(thumb.background(WispColors.Purple), contentAlignment = Alignment.Center) { Ghost(34.dp, float = false) }
+            }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(e.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    WispChip(e.source)
+                    e.estMinutes?.let { Text("~$it min", color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall) }
+                    e.rating?.let { Text(Publish.stars(it), color = WispColors.Pumpkin) }
+                }
             }
         }
     }
