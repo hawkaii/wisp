@@ -245,7 +245,7 @@ private fun MyNotes(value: String, onChange: (String) -> Unit) {
                     if (value.isEmpty()) Text("What do you think? Two lines is enough.", color = WispColors.Lavender)
                     inner()
                 },
-            }
+            )
         }
     }
 }
