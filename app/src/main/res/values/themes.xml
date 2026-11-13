@@ -1,0 +1,12 @@
+<resources>
+    <style name="Theme.Wisp" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0B0A0F</item>
+        <item name="android:statusBarColor">#0B0A0F</item>
+        <item name="android:navigationBarColor">#1F1A2A</item>
+    </style>
+    <style name="Theme.Wisp.Sheet" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>
