@@ -1,5 +1,4 @@
-package app.wispnotes.extract
-
+import android.util.Log
 import app.wispnotes.note.Source
 import app.wispnotes.note.TranscriptParser
 import java.net.URLEncoder
@@ -14,6 +13,7 @@ import org.jsoup.nodes.Document
  * bodies, so tests run on fixtures; [extract] only adds the fetching around them.
  */
 object Extractors {
+    private const val TAG = "WispTranscript"
     private const val BROWSER_UA = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/124.0 Mobile Safari/537.36"
     private const val YOUTUBE_API_URL = "https://www.youtube.com/youtubei/v1/player?prettyPrint=false"
     private const val YOUTUBE_ANDROID_UA = "com.google.android.youtube/20.10.38 (Linux; U; Android 14)"
@@ -77,15 +77,19 @@ object Extractors {
     ): app.wispnotes.note.TranscriptResult {
         val videoId = Source.youtubeId(url.orEmpty()) ?: TranscriptParser.videoId(html)
         val apiPlayer = videoId?.let { fetchPlayer(it, post) }
+        Log.d(TAG, "stage=inner_tube_player video_id=${videoId != null} response=${apiPlayer != null} tracks=${TranscriptParser.hasCaptionTracks(apiPlayer)}")
         val track = TranscriptParser.captionTrackFromJson(apiPlayer, preferredLanguage)
             ?: TranscriptParser.captionTrack(html, preferredLanguage)
             ?: return app.wispnotes.note.TranscriptResult(emptyList(), false)
+        Log.d(TAG, "stage=caption_track language=${track.languageCode} kind=${track.kind ?: "manual"}")
         val headers = if (apiPlayer != null) mapOf("User-Agent" to YOUTUBE_ANDROID_UA) else browser
         val bodies = listOfNotNull(
             runCatching { fetch(track.baseUrl, headers) }.getOrNull(),
             runCatching { fetch(TranscriptParser.json3Url(track.baseUrl), headers) }.getOrNull(),
         )
-        val segments = bodies.asSequence().map { TranscriptParser.parseCaptionBody(it) }.firstOrNull { it.isNotEmpty() }.orEmpty()
+        val parsed = bodies.map { body -> body to TranscriptParser.parseCaptionBody(body) }
+        Log.d(TAG, "stage=caption_fetch bodies=${parsed.map { it.first.length }} segments=${parsed.map { it.second.size }}")
+        val segments = parsed.asSequence().map { it.second }.firstOrNull { it.isNotEmpty() }.orEmpty()
         return app.wispnotes.note.TranscriptResult(TranscriptParser.mergeSegments(segments), true)
     }
 
