@@ -234,7 +234,7 @@ private fun MyNotes(value: String, onChange: (String) -> Unit) {
     WispCard(Modifier.fillMaxWidth(), color = WispColors.Purple) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("YOUR 2–3 LINES", style = MaterialTheme.typography.labelMedium, color = WispColors.Haze)
-            WispPanel(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WispColors.Ink).padding(12.dp)) {
             BasicTextField(
                 value = value,
                 onValueChange = onChange,
