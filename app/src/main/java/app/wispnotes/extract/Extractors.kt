@@ -1,3 +1,5 @@
+package app.wispnotes.extract
+
 import android.util.Log
 import app.wispnotes.note.Source
 import app.wispnotes.note.TranscriptParser
