@@ -1,0 +1,10 @@
+<resources>
+    <!-- Android 12+ draws its own splash from these two items. -->
+    <style name="Theme.Wisp" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:statusBarColor">#0B0A0F</item>
+        <item name="android:navigationBarColor">#1F1A2A</item>
+        <item name="android:windowSplashScreenBackground">@color/splash_bg</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+    </style>
+</resources>

@@ -13,8 +13,11 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 abstract class NoteDao {
-    @Query("SELECT * FROM notes WHERE status = 'queued' ORDER BY saved DESC, fileName DESC")
+    @Query("SELECT * FROM notes WHERE status IN ('queued', 'in-progress') ORDER BY saved DESC, fileName DESC")
     abstract fun queue(): Flow<List<NoteEntry>>
+
+    @Query("SELECT * FROM notes ORDER BY saved DESC, fileName DESC")
+    abstract fun all(): Flow<List<NoteEntry>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun put(entry: NoteEntry)
@@ -32,7 +35,7 @@ abstract class NoteDao {
     }
 }
 
-@Database(entities = [NoteEntry::class], version = 1, exportSchema = false)
+@Database(entities = [NoteEntry::class], version = 2, exportSchema = false)
 abstract class WispDb : RoomDatabase() {
     abstract fun notes(): NoteDao
 

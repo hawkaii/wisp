@@ -3,6 +3,8 @@ package app.wispnotes.index
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import app.wispnotes.note.Frontmatter
+import app.wispnotes.note.Review
+import java.time.LocalDate
 
 /** One row of the Room index. The vault is the truth: this table can be deleted and rebuilt any time. */
 @Entity(tableName = "notes")
@@ -18,8 +20,21 @@ data class NoteEntry(
     val tags: String,
     val saved: String,
     val extracted: String,
+    val rating: Int? = null,
+    val finished: String? = null,
+    val nextReview: String? = null,
+    val reviewStep: Int? = null,
+    /** Text after the frontmatter, for search. shortcut: capped, long transcripts are searched only in their first part. */
+    val body: String = "",
 ) {
+    fun tagList() = tags.split(',').filter { it.isNotBlank() }
+
+    fun isDue(today: LocalDate) = Review.isDue(status, nextReview, finished, today)
+
+
     companion object {
+        private const val MAX_BODY = 20_000
+
         /** Null when the file has no Wisp frontmatter (not our note). */
         fun parse(fileName: String, content: String): NoteEntry? {
             if (Frontmatter.text(content, "source") == null) return null
@@ -35,6 +50,11 @@ data class NoteEntry(
                 tags = Frontmatter.tags(content).joinToString(","),
                 saved = Frontmatter.text(content, "saved").orEmpty(),
                 extracted = Frontmatter.text(content, "extracted") ?: "pending",
+                rating = Frontmatter.text(content, "rating")?.toIntOrNull(),
+                finished = Frontmatter.text(content, "finished"),
+                nextReview = Frontmatter.text(content, "next_review"),
+                reviewStep = Frontmatter.text(content, "review_step")?.toIntOrNull(),
+                body = Frontmatter.body(content).take(MAX_BODY),
             )
         }
     }
