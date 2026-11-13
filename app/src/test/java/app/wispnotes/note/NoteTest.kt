@@ -14,6 +14,8 @@ class NoteTest {
         assertEquals("video", Source.detect("https://youtu.be/abc").type)
         assertEquals("video", Source.detect("https://m.youtube.com/watch?v=abc").type)
         assertEquals("short", Source.detect("https://www.youtube.com/shorts/abc").type)
+        assertEquals("reddit", Source.detect("https://www.reddit.com/r/kotlin/comments/abc/title/").source)
+        assertEquals("web", Source.detect("https://www.reddit.com/r/kotlin/").source)
         assertEquals("imdb", Source.detect("https://www.imdb.com/title/tt1/").source)
         assertEquals("letterboxd", Source.detect("https://letterboxd.com/film/x/").source)
         assertEquals(listOf("article"), Source.detect("https://example.com/a").tags)

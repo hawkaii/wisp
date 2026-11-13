@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.documentfile.provider.DocumentFile
+import app.wispnotes.index.RawNote
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -62,7 +63,7 @@ class SafVaultRepository(context: Context) : VaultRepository {
         }
     }
 
-    override suspend fun writeInboxNote(fileName: String, content: String): Result<Unit> =
+    override suspend fun writeInboxNote(fileName: String, content: String): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val uri = vaultUri.first() ?: error("No vault chosen")
@@ -76,8 +77,44 @@ class SafVaultRepository(context: Context) : VaultRepository {
                 val file = inbox.createFile("application/octet-stream", name) ?: error("Cannot create $name")
                 ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(content.toByteArray()) }
                     ?: error("Cannot write $name")
+                name
             }
         }
+
+    // shortcut: reads every file in full over SAF on each scan; fine for hundreds of notes, read only the head if a vault gets huge.
+    override suspend fun listInboxNotes(): List<RawNote> = withContext(Dispatchers.IO) {
+        val inbox = inboxDir() ?: return@withContext emptyList()
+        inbox.listFiles().filter { it.isFile && it.name?.endsWith(".md") == true }.mapNotNull { f ->
+            val text = runCatching { ctx.contentResolver.openInputStream(f.uri)?.use { it.readBytes().decodeToString() } }.getOrNull()
+            text?.let { RawNote(f.name.orEmpty(), it) }
+        }
+    }
+
+    // shortcut: "wt" rewrites in place (SAF has no atomic rename), and an edit made in Obsidian between our read and write is lost; the window is milliseconds.
+    override suspend fun editInboxNote(fileName: String, edit: (String) -> String): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val file = inboxDir()?.findFile(fileName) ?: error("$fileName not found")
+                val old = ctx.contentResolver.openInputStream(file.uri)?.use { it.readBytes().decodeToString() }
+                    ?: error("Cannot read $fileName")
+                val new = edit(old)
+                if (new != old) {
+                    ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(new.toByteArray()) }
+                        ?: error("Cannot write $fileName")
+                }
+                new
+            }
+        }
+
+    override suspend fun inboxNoteUri(fileName: String): Uri? = withContext(Dispatchers.IO) {
+        inboxDir()?.findFile(fileName)?.uri
+    }
+
+    private suspend fun inboxDir(): DocumentFile? {
+        val uri = vaultUri.first() ?: return null
+        val root = DocumentFile.fromTreeUri(ctx, uri) ?: return null
+        return root.findFile("Inbox")?.takeIf { it.isDirectory }
+    }
 
     private fun dir(parent: DocumentFile, name: String): DocumentFile =
         parent.findFile(name)?.takeIf { it.isDirectory }
