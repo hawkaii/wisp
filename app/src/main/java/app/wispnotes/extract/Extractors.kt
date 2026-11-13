@@ -36,10 +36,13 @@ object Extractors {
 
     // ---- YouTube -----------------------------------------------------------------------------
 
-    private fun youtube(url: String, fetch: Fetch): Extracted {
-        val oembed = runCatching { youtubeOembed(fetch("https://www.youtube.com/oembed?format=json&url=${enc(url)}", emptyMap())) }
+    fun youtubeQuick(url: String, fetch: Fetch): Extracted =
+        runCatching { youtubeOembed(fetch("https://www.youtube.com/oembed?format=json&url=${enc(url)}", emptyMap())) }
             .getOrDefault(Extracted())
-        val watch = runCatching { youtubeWatch(fetch(url, browser)) }.getOrDefault(Extracted())
+
+    private fun youtube(url: String, fetch: Fetch): Extracted {
+        val oembed = youtubeQuick(url, fetch)
+        val watch = runCatching { youtubeWatch(fetch(youtubeWatchUrl(url), browser)) }.getOrDefault(Extracted())
         return Extracted(
             title = oembed.title,
             author = oembed.author,
@@ -48,6 +51,11 @@ object Extractors {
             text = watch.text,
         )
     }
+
+    private fun youtubeWatchUrl(url: String): String =
+        if (runCatching { java.net.URI(url).host.orEmpty().contains("music.youtube.com") }.getOrDefault(false)) {
+            url.replaceFirst(Regex("https?://music\\.youtube\\.com"), "https://www.youtube.com")
+        } else url
 
     fun youtubeOembed(json: String?): Extracted {
         val o = JSONObject(json ?: return Extracted())

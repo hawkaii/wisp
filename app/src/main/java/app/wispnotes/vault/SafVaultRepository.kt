@@ -40,7 +40,7 @@ class SafVaultRepository(context: Context) : VaultRepository {
         runCatching {
             ctx.contentResolver.takePersistableUriPermission(parent, rw)
             val root = DocumentFile.fromTreeUri(ctx, parent) ?: error("Folder not readable")
-            val vault = dir(root, "Wisp")
+            val vault = if (root.name == "Wisp" || root.findFile(".obsidian") != null) root else dir(root, "Wisp")
             val obsidian = dir(vault, ".obsidian")
             if (obsidian.findFile("app.json") == null) {
                 val f = obsidian.createFile("application/json", "app.json") ?: error("Cannot create app.json")
