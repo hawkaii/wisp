@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -59,10 +60,11 @@ private val Scheme = darkColorScheme(
 
 private val Bold = FontWeight.ExtraBold
 private val WispTypography = Typography(
-    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 31.sp, fontWeight = Bold),
+    headlineMedium = TextStyle(fontSize = 28.sp, lineHeight = 31.sp, fontWeight = Bold, letterSpacing = (-0.02).em),
     titleMedium = TextStyle(fontSize = 18.sp, fontWeight = Bold),
     bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 22.sp),
     bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+    bodySmall = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
     labelLarge = TextStyle(fontSize = 18.sp, fontWeight = Bold),
     labelMedium = TextStyle(fontSize = 12.sp, fontWeight = Bold),
 )
@@ -108,7 +110,7 @@ fun WispCard(
         modifier
             .drawBehind {
                 drawRoundRect(
-                    WispColors.Void,
+                    Color.Black,
                     topLeft = Offset(0f, 4.dp.toPx()),
                     size = size,
                     cornerRadius = CornerRadius(22.dp.toPx()),
@@ -116,5 +118,19 @@ fun WispCard(
             }
             .background(color, shape)
             .border(Outline, shape),
+    ) { content() }
+}
+/** Black inner panel inside a purple sticker card. */
+@Composable
+fun WispPanel(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Box(
+        modifier
+            .background(WispColors.Ink, shape)
+            .border(BorderStroke(3.dp, Color.Black), shape)
+            .padding(12.dp),
     ) { content() }
 }

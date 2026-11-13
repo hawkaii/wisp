@@ -114,24 +114,12 @@ private fun Page(title: String, body: String, actions: @Composable () -> Unit) {
 
 @Composable
 private fun Big(label: String, primary: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(16.dp)
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(56.dp)
-            .clip(shape)
-            .background(if (primary) WispColors.Pumpkin else WispColors.Purple)
-            .border(Outline, shape)
-            .clickable(role = Role.Button, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label,
-            fontSize = 18.sp,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (primary) WispColors.Void else androidx.compose.ui.graphics.Color.White,
-        )
-    }
+    WispButton(
+        label = label,
+        onClick = onClick,
+        color = if (primary) WispColors.Pumpkin else WispColors.Purple,
+        textColor = if (primary) WispColors.Void else androidx.compose.ui.graphics.Color.White,
+    )
 }
 
 @Composable
