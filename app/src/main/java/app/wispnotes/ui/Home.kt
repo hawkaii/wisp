@@ -159,7 +159,7 @@ fun SearchField(value: String, onChange: (String) -> Unit) {
 }
 
 @Composable
-private fun Empty(headline: String, body: String) {
+fun Empty(headline: String, body: String) {
     WispCard(Modifier.fillMaxWidth(), color = WispColors.Ink) {
         Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Ghost(120.dp)
