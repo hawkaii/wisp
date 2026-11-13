@@ -249,6 +249,7 @@ private fun MyNotes(value: String, onChange: (String) -> Unit) {
         }
     }
 }
+}
 
 /** Typewriter preview of the blog draft. Labelled as a preview: nothing is sent anywhere. */
 @Composable
