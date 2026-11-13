@@ -66,10 +66,15 @@ class IndexTest {
     private fun entry(name: String, minutes: Int?, saved: String = "2026-11-01", status: String = "queued") =
         NoteEntry(name, name, "web", "article", "", status, minutes, null, "", saved, "done")
 
+    @Test fun pendingReturnsOnlyPendingEntries() {
+        val pending = entry("pending", null).copy(extracted = "pending")
+        val done = entry("done", 5).copy(extracted = "done")
+        assertEquals(listOf(pending), Indexer.pending(listOf(pending, done)))
+    }
     @Test fun picksFitTheTimeBestFitFirst() {
         val q = listOf(entry("short", 5), entry("ten", 10), entry("long", 40), entry("mid", 20), entry("unknown", null), entry("done", 10, status = "archived"))
-        assertEquals(listOf("ten", "unknown", "short"), Picker.pick(q, 10).map { it.fileName })
-        assertEquals(listOf("mid", "ten", "unknown"), Picker.pick(q, 25).map { it.fileName })
+        assertEquals(listOf("ten", "short"), Picker.pick(q, 10).map { it.fileName })
+        assertEquals(listOf("mid", "ten", "short"), Picker.pick(q, 25).map { it.fileName })
         assertEquals("long", Picker.pick(q, 60).first().fileName)
         assertEquals(3, Picker.pick(q, 60).size)
         assertTrue(Picker.pick(listOf(entry("long", 40)), 10).isEmpty())

@@ -23,7 +23,7 @@ data class AppState(
     val vaultOk: Boolean = false,
     /** A vault was saved but its permission is gone: onboarding restarts at the vault step. */
     val vaultLost: Boolean = false,
-    /** Readable vault location for Settings, e.g. `primary:Documents/Vault`. */
+    /** Readable vault location for Settings, without the provider prefix. */
     val vaultPath: String = "",
 )
 
@@ -36,7 +36,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() = viewModelScope.launch {
         val uri = repo.vaultUri.first()
         val ok = uri != null && repo.hasAccess()
-        _state.value = AppState(true, repo.isOnboarded(), ok, uri != null && !ok, uri?.lastPathSegment.orEmpty())
+        _state.value = AppState(true, repo.isOnboarded(), ok, uri != null && !ok, uri?.lastPathSegment.orEmpty().substringAfter(':'))
     }
 
     fun pickVault(uri: Uri) = viewModelScope.launch {

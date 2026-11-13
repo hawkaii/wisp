@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.wispnotes.extract.ExtractWorker
 import app.wispnotes.index.Indexer
 import app.wispnotes.index.NoteEntry
 import app.wispnotes.index.WispDb
@@ -27,7 +28,19 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Rebuilds the index from the vault files. Safe to run any time; the files are the truth. */
     fun rescan() = viewModelScope.launch {
-        Indexer.rescan({ repo.listInboxNotes() }, { dao.replaceAll(it) })
+        Indexer.rescan({ repo.listInboxNotes() }) { entries ->
+            dao.replaceAll(entries)
+            Indexer.pending(entries).forEach { ExtractWorker.enqueue(getApplication(), it.fileName) }
+        }
+    }
+
+    fun retry(entry: NoteEntry) {
+        ExtractWorker.enqueue(getApplication(), entry.fileName)
+    }
+
+    fun start(entry: NoteEntry) = viewModelScope.launch {
+        repo.editInboxNote(entry.fileName) { Frontmatter.set(it, mapOf("status" to "in-progress")) }
+        dao.put(entry.copy(status = "in-progress"))
     }
 
     fun archive(entry: NoteEntry) = viewModelScope.launch {

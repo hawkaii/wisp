@@ -82,7 +82,7 @@ fun SettingsScreen(vaultPath: String, onChangeVault: (Uri) -> Unit, onBack: () -
                 }
                 Card {
                     Text("Sync", style = MaterialTheme.typography.titleMedium)
-                    WispButton("How to sync", { sync = true }, color = WispColors.Lavender)
+                    WispButton("How to sync", { sync = true }, color = WispColors.Purple, textColor = Color.White)
                 }
                 Card {
                     Text("About", style = MaterialTheme.typography.titleMedium)

@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -60,6 +61,7 @@ import app.wispnotes.note.parseMarkdown
 import app.wispnotes.ui.theme.LocalReduceMotion
 import app.wispnotes.ui.theme.WispCard
 import app.wispnotes.ui.theme.WispColors
+import app.wispnotes.ui.theme.WispPanel
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 
@@ -69,6 +71,7 @@ fun NoteScreen(fileName: String, shared: Shared?, onBack: () -> Unit, vm: NoteVi
     val ui by vm.ui.collectAsStateWithLifecycle()
     val notes by vm.notes.collectAsStateWithLifecycle()
     val missing by vm.missing.collectAsStateWithLifecycle()
+    val uriHandler = LocalUriHandler.current
     var finishing by rememberSaveable(fileName) { mutableStateOf(false) }
     var rating by rememberSaveable(fileName) { mutableIntStateOf(0) }
     var publish by rememberSaveable(fileName) { mutableStateOf(false) }
@@ -99,6 +102,7 @@ fun NoteScreen(fileName: String, shared: Shared?, onBack: () -> Unit, vm: NoteVi
                             canFinish = Review.hasEnoughNotes(notes),
                             finishing = finishing,
                             onStart = vm::start,
+                            onOpen = { uriHandler.openUri(e.url) },
                             onFinish = { finishing = true },
                             onPublish = { publish = !publish },
                         )
@@ -152,9 +156,7 @@ private fun Header(e: NoteEntry, author: String?, shared: Shared?) {
                 Text(e.title, style = MaterialTheme.typography.titleMedium, maxLines = 4, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                WispChip(e.source)
                 WispChip(statusLabel(e.status), selected = e.status != "queued")
-                if (e.status == "in-progress") Flame(20.dp)
             }
             val meta = listOfNotNull(
                 e.estMinutes?.let { "~$it min" },
@@ -176,21 +178,38 @@ internal fun statusLabel(s: String) = when (s) {
 }
 
 @Composable
-private fun Actions(e: NoteEntry, canFinish: Boolean, finishing: Boolean, onStart: () -> Unit, onFinish: () -> Unit, onPublish: () -> Unit) {
+private fun Actions(
+    e: NoteEntry,
+    canFinish: Boolean,
+    finishing: Boolean,
+    onStart: () -> Unit,
+    onOpen: () -> Unit,
+    onFinish: () -> Unit,
+    onPublish: () -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (e.status) {
             "in-progress" -> {
-                WispButton("Finish", onFinish, enabled = canFinish && !finishing)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                WispButton("Open", onOpen, Modifier.weight(1f), color = WispColors.Purple, textColor = Color.White, compact = true)
+                WispButton("Finish", onFinish, Modifier.weight(1f), enabled = canFinish && !finishing, compact = true)
+            }
                 if (!canFinish) Text("Write 2 lines in My notes first. Then you can finish and rate it.", color = WispColors.Lavender)
             }
             "done" -> {
+                WispButton("Open", onOpen, color = WispColors.Purple, textColor = Color.White)
                 WispButton("Publish (mock)", onPublish)
                 Text(
                     e.nextReview?.let { "Comes back for review on $it." } ?: "Comes back for review soon.",
                     color = WispColors.Lavender,
                 )
             }
-            else -> WispButton("Start", onStart)
+            else -> {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    WispButton("Start", { onStart(); onOpen() }, Modifier.weight(1f), compact = true)
+                    WispButton("Open", onOpen, Modifier.weight(1f), color = WispColors.Purple, textColor = Color.White, compact = true)
+                }
+            }
         }
     }
 }
@@ -201,8 +220,9 @@ private fun FinishCard(rating: Int, onRate: (Int) -> Unit, onCancel: () -> Unit,
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("How was it?", style = MaterialTheme.typography.titleMedium)
             GhostRating(rating, onRate)
+            Text("$rating of 5", color = WispColors.Haze, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                WispButton("Done", onDone, enabled = rating > 0)
+                WispButton("Done", onDone, enabled = rating > 0, compact = true)
                 WispChip("Not yet", onClick = onCancel)
             }
         }
@@ -211,9 +231,10 @@ private fun FinishCard(rating: Int, onRate: (Int) -> Unit, onCancel: () -> Unit,
 
 @Composable
 private fun MyNotes(value: String, onChange: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("My notes", style = MaterialTheme.typography.titleMedium)
-        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WispColors.Ink).padding(12.dp)) {
+    WispCard(Modifier.fillMaxWidth(), color = WispColors.Purple) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("YOUR 2–3 LINES", style = MaterialTheme.typography.labelMedium, color = WispColors.Haze)
+            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WispColors.Ink).padding(12.dp)) {
             BasicTextField(
                 value = value,
                 onValueChange = onChange,
@@ -227,6 +248,7 @@ private fun MyNotes(value: String, onChange: (String) -> Unit) {
             )
         }
     }
+}
 }
 
 /** Typewriter preview of the blog draft. Labelled as a preview: nothing is sent anywhere. */

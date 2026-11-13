@@ -31,10 +31,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,17 +42,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import app.wispnotes.R
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.wispnotes.MainViewModel
 import app.wispnotes.ui.theme.WispColors
 
-private enum class Tab(val label: String, val icon: ImageVector) {
-    Home("Home", Icons.Filled.Home),
-    Review("Review", Icons.Filled.Refresh),
-    Notes("Notes", Icons.Filled.Menu),
+private enum class Tab(val label: String, val icon: Int) {
+    Home("Home", R.drawable.stk_cauldron),
+    Review("Review", R.drawable.stk_calendar),
+    Notes("Notes", R.drawable.stk_house),
 }
 
 @Composable
@@ -93,15 +90,16 @@ private fun MainScaffold(vm: MainViewModel, state: AppState) {
             val shared = Shared(this@SharedTransitionLayout, this)
             when {
                 r.startsWith("note:") -> NoteScreen(r.removePrefix("note:"), shared, onBack = { route = "" })
+                r == "whatnow" -> WhatNowScreen(onBack = { route = "" })
                 r == "settings" -> SettingsScreen(state.vaultPath, onChangeVault = { vm.pickVault(it); route = "" }, onBack = { route = "" })
-                else -> Tabs(index, { index = it }, shared, onOpen = { route = "note:$it" }, onSettings = { route = "settings" })
+                else -> Tabs(index, { index = it }, shared, onOpen = { route = "note:$it" }, onSettings = { route = "settings" }, onWhatNow = { route = "whatnow" })
             }
         }
     }
 }
 
 @Composable
-private fun Tabs(index: Int, onIndex: (Int) -> Unit, shared: Shared, onOpen: (String) -> Unit, onSettings: () -> Unit) {
+private fun Tabs(index: Int, onIndex: (Int) -> Unit, shared: Shared, onOpen: (String) -> Unit, onSettings: () -> Unit, onWhatNow: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         AnimatedContent(
             targetState = index,
@@ -114,7 +112,7 @@ private fun Tabs(index: Int, onIndex: (Int) -> Unit, shared: Shared, onOpen: (St
             label = "tab",
         ) { i ->
             when (Tab.entries[i]) {
-                Tab.Home -> HomeScreen(shared, onOpen, onSettings)
+                Tab.Home -> HomeScreen(shared, onOpen, onSettings, onWhatNow)
                 Tab.Review -> ReviewScreen()
                 Tab.Notes -> NotesScreen(onOpen)
             }
@@ -141,7 +139,7 @@ private fun BottomBar(selected: Int, onSelect: (Int) -> Unit) {
                         Modifier
                             .then(if (on) Modifier.background(WispColors.Kiro, pill).border(2.dp, WispColors.Void, pill) else Modifier)
                             .padding(horizontal = 14.dp, vertical = 4.dp),
-                    ) { Icon(tab.icon, null, tint = tint) }
+                    ) { Icon(painterResource(tab.icon), contentDescription = null, tint = Color.Unspecified, modifier = Modifier.height(30.dp)) }
                     Text(tab.label, style = MaterialTheme.typography.labelMedium, color = tint)
                 }
             }
