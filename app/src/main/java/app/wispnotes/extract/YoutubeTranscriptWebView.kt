@@ -178,8 +178,7 @@ object YoutubeTranscriptWebView {
           initial: !!window.ytInitialPlayerResponse,
           config: !!(window.ytplayer && window.ytplayer.config && window.ytplayer.config.args && window.ytplayer.config.args.player_response),
           buttons: [...document.querySelectorAll('button, [role="button"], tp-yt-paper-button')].slice(0, 30).map(e => (e.getAttribute('aria-label') || e.textContent || '').trim()).filter(Boolean),
-          segments: document.querySelectorAll('ytd-transcript-segment-renderer, ytm-transcript-segment-renderer, ytm-transcript-segment').length,
-          body: (document.body && document.body.innerText || '').slice(0, 300)
+          segments: document.querySelectorAll('ytd-transcript-segment-renderer, ytm-transcript-segment-renderer, ytm-transcript-segment').length
         }))()
     """
 
@@ -203,13 +202,13 @@ object YoutubeTranscriptWebView {
             }
           };
           const expandDescription = () => {
-            const button = [...document.querySelectorAll('#expand, #description-inline-expander tp-yt-paper-button, ytd-text-inline-expander tp-yt-paper-button, button')]
-              .find(e => /^(show more|more)$/.test(label(e)));
+            const button = [...document.querySelectorAll('#expand, #description-inline-expander tp-yt-paper-button, ytd-text-inline-expander tp-yt-paper-button, ytm-video-description-more-button-renderer, ytm-slim-video-information-renderer button, button')]
+              .find(e => /\b(show more|more)\s*$/.test(label(e)));
             if (button) button.click();
           };
           const openTranscript = () => {
-            const button = [...document.querySelectorAll('ytd-video-description-transcript-section-renderer button, button, tp-yt-paper-button, ytd-button-renderer, [role="button"]')]
-              .find(e => /show transcript/.test(label(e)));
+            const button = [...document.querySelectorAll('ytd-video-description-transcript-section-renderer button, ytm-video-description-transcript-section-renderer button, button, tp-yt-paper-button, ytd-button-renderer, [role="button"]')]
+              .find(e => /transcript/.test(label(e)));
             if (button) {
               button.click();
               window.__wispTranscriptClicked = true;
