@@ -64,7 +64,7 @@ object Extractors {
 
     /** Primary transcript path: InnerTube player data, then captions from its selected track. */
     fun youtubeTranscript(html: String?, fetch: Fetch, preferredLanguage: String? = Locale.getDefault().language): app.wispnotes.note.TranscriptResult =
-        youtubeTranscript(null, html, fetch, { _, _, _ -> null }, preferredLanguage)
+        youtubeTranscriptWithApi(null, html, fetch, { _, _, _ -> null }, preferredLanguage)
 
     fun youtubeTranscriptWithApi(
         url: String?,
