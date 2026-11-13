@@ -13,8 +13,8 @@ android {
         applicationId = "app.wispnotes"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0" // CI reads this for the release tag and APK name
+        versionCode = 3
+        versionName = "0.3.0" // CI reads this for the release tag and APK name
     }
 
     signingConfigs {
@@ -40,7 +40,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true // Settings shows the version
+    }
     lint { abortOnError = true }
 }
 

@@ -1,6 +1,17 @@
 package app.wispnotes.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalContext
+import app.wispnotes.AppState
+import app.wispnotes.review.ReviewWorker
+import app.wispnotes.ui.theme.LocalReduceMotion
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -54,15 +65,43 @@ fun WispApp(vm: MainViewModel) {
     Box(Modifier.fillMaxSize().background(WispColors.Void).statusBarsPadding()) {
         when {
             !state.loaded -> Unit
-            state.onboarded && state.vaultOk -> MainScaffold()
+            state.onboarded && state.vaultOk -> MainScaffold(vm, state)
             else -> OnboardingScreen(vm, state)
         }
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun MainScaffold() {
+private fun MainScaffold(vm: MainViewModel, state: AppState) {
     var index by rememberSaveable { mutableIntStateOf(0) }
+    // "" = tabs, "settings", or "note:<file name>"
+    var route by rememberSaveable { mutableStateOf("") }
+    val ctx = LocalContext.current
+    val reduce = LocalReduceMotion.current
+    LaunchedEffect(Unit) { ReviewWorker.schedule(ctx) }
+
+    SharedTransitionLayout {
+        AnimatedContent(
+            targetState = route,
+            transitionSpec = {
+                if (reduce) EnterTransition.None togetherWith ExitTransition.None
+                else fadeIn(tween(220)) togetherWith fadeOut(tween(220))
+            },
+            label = "route",
+        ) { r ->
+            val shared = Shared(this@SharedTransitionLayout, this)
+            when {
+                r.startsWith("note:") -> NoteScreen(r.removePrefix("note:"), shared, onBack = { route = "" })
+                r == "settings" -> SettingsScreen(state.vaultPath, onChangeVault = { vm.pickVault(it); route = "" }, onBack = { route = "" })
+                else -> Tabs(index, { index = it }, shared, onOpen = { route = "note:$it" }, onSettings = { route = "settings" })
+            }
+        }
+    }
+}
+
+@Composable
+private fun Tabs(index: Int, onIndex: (Int) -> Unit, shared: Shared, onOpen: (String) -> Unit, onSettings: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
         AnimatedContent(
             targetState = index,
@@ -75,12 +114,12 @@ private fun MainScaffold() {
             label = "tab",
         ) { i ->
             when (Tab.entries[i]) {
-                Tab.Home -> HomeScreen()
+                Tab.Home -> HomeScreen(shared, onOpen, onSettings)
                 Tab.Review -> ReviewScreen()
-                Tab.Notes -> NotesScreen()
+                Tab.Notes -> NotesScreen(onOpen)
             }
         }
-        BottomBar(index) { index = it }
+        BottomBar(index, onIndex)
     }
 }
 
@@ -93,7 +132,7 @@ private fun BottomBar(selected: Int, onSelect: (Int) -> Unit) {
                 val on = i == selected
                 val tint = if (on) Color.White else WispColors.Lavender
                 Column(
-                    Modifier.weight(1f).fillMaxSize().clickable(role = Role.Tab) { onSelect(i) },
+                    Modifier.weight(1f).fillMaxSize().pressable(role = Role.Tab) { onSelect(i) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {

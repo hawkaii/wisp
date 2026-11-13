@@ -16,6 +16,12 @@ object Frontmatter {
 
     private fun isContinuation(line: String) = line.startsWith(" ") || line.startsWith("\t") || line.startsWith("- ")
 
+    /** Everything after the closing `---`, or the whole text when there is no frontmatter. */
+    fun body(content: String): String {
+        val b = block(content) ?: return content
+        return b.lines.subList(b.end + 1, b.lines.size).joinToString("\n")
+    }
+
     /** Raw `key: value` pairs. A block list (`tags:` then `- a`) is folded into `[a, b]`. */
     fun read(content: String): Map<String, String> {
         val b = block(content) ?: return emptyMap()

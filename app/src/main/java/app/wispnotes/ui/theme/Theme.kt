@@ -9,7 +9,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import android.content.Context
+import android.provider.Settings
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -62,9 +72,23 @@ private val WispShapes = Shapes(
     large = RoundedCornerShape(28.dp),
 )
 
+/** True when the system animation scale is 0 ("remove animations"): springs snap, nothing floats or flickers. */
+val LocalReduceMotion = compositionLocalOf { false }
+
+private fun reduceMotionNow(ctx: Context) =
+    Settings.Global.getFloat(ctx.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+
 @Composable
 fun WispTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = Scheme, typography = WispTypography, shapes = WispShapes, content = content)
+    val ctx = LocalContext.current
+    var reduce by remember { mutableStateOf(reduceMotionNow(ctx)) }
+    LifecycleResumeEffect(Unit) {
+        reduce = reduceMotionNow(ctx) // the setting is changed outside the app: read it again on resume
+        onPauseOrDispose {}
+    }
+    CompositionLocalProvider(LocalReduceMotion provides reduce) {
+        MaterialTheme(colorScheme = Scheme, typography = WispTypography, shapes = WispShapes, content = content)
+    }
 }
 
 val Outline = BorderStroke(3.dp, WispColors.Void)
