@@ -4,7 +4,12 @@ A haunted scrapbook for your phone. Share a link from any app and Wisp saves it 
 
 Built for Kiroween 2026 (Resurrection). Android, Kotlin, Jetpack Compose.
 
-## Status: M1
+## Status: M2
+
+- Extraction (no AI): after Save, a WorkManager job reads the page and fills the note: title, author, thumbnail, length, text. `extracted` goes `pending` -> `done`, `partial` or `failed`. Sources: YouTube, web articles, IMDb, Letterboxd, X, Reddit, Instagram (link-preview crawler tags; paste the caption if it fails).
+- Home is the queue: cards, source filter, search, swipe to archive, and "What now?" (10, 25 or 60 minutes -> 3 picks). It reads a Room index that is rebuilt from the vault files on every visit.
+
+## M1
 
 - Onboarding: pick an Obsidian vault, or create a new one (`Wisp/.obsidian`, `Wisp/Inbox`).
 - Share target: share text or a link to Wisp and it writes `Inbox/YYYY-MM-DD-slug.md` with frontmatter.

@@ -18,13 +18,6 @@ import app.wispnotes.ui.theme.WispCard
 import app.wispnotes.ui.theme.WispColors
 
 @Composable
-fun HomeScreen() = Placeholder(
-    "Home",
-    "Nothing queued yet.",
-    "Share a link to Wisp from any app. It lands here as a note.",
-)
-
-@Composable
 fun ReviewScreen() = Placeholder(
     "Review",
     "Nothing to revisit.",

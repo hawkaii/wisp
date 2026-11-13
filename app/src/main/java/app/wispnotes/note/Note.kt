@@ -8,6 +8,8 @@ data class NoteDraft(
     val url: String,
     val title: String,
     val saved: LocalDate,
+    /** Pasted by the user when extraction cannot read the page (Instagram). Goes under `## Text`. */
+    val caption: String = "",
 )
 
 object Note {
@@ -21,15 +23,12 @@ object Note {
 
     fun fileName(d: NoteDraft) = "${d.saved}-${slug(d.title)}.md"
 
-    private fun q(s: String) =
-        "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace(Regex("[\\r\\n]+"), " ") + "\""
-
     fun render(d: NoteDraft): String = buildString {
         appendLine("---")
         appendLine("type: ${d.info.type}")
         appendLine("source: ${d.info.source}")
-        appendLine("url: ${q(d.url)}")
-        appendLine("title: ${q(d.title)}")
+        appendLine("url: ${Frontmatter.quote(d.url)}")
+        appendLine("title: ${Frontmatter.quote(d.title)}")
         appendLine("saved: ${d.saved}")
         appendLine("status: queued")
         appendLine("est_minutes:")
@@ -40,5 +39,6 @@ object Note {
         appendLine()
         appendLine("## My notes")
         appendLine()
+        if (d.caption.isNotBlank()) append(Sections.textBlock(d.caption))
     }
 }

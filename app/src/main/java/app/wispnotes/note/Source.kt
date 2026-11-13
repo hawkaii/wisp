@@ -42,6 +42,7 @@ object Source {
             host == "youtu.be" -> info("video", "youtube")
             host.endsWith("youtube.com") && path.startsWith("/shorts") -> info("short", "youtube")
             host.endsWith("youtube.com") && path.startsWith("/watch") -> info("video", "youtube")
+            host.endsWith("reddit.com") && path.contains("/comments/") -> info("post", "reddit")
             host.endsWith("imdb.com") -> SourceInfo("movie", "imdb", listOf("movie"))
             host.endsWith("letterboxd.com") -> SourceInfo("movie", "letterboxd", listOf("movie"))
             else -> SourceInfo("article", "web", listOf("article"))
