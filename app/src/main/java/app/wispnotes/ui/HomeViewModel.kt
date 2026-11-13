@@ -48,11 +48,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         dao.put(entry.copy(status = "in-progress"))
     }
 
-    fun start(entry: NoteEntry) = viewModelScope.launch {
-        repo.editInboxNote(entry.fileName) { Frontmatter.set(it, mapOf("status" to "in-progress")) }
-        dao.put(entry.copy(status = "in-progress"))
-    }
-
     fun archive(entry: NoteEntry) = viewModelScope.launch {
         dao.put(entry.copy(status = "archived")) // the card leaves the list at once
         repo.editInboxNote(entry.fileName) { Frontmatter.set(it, mapOf("status" to "archived")) }
