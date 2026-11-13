@@ -24,7 +24,9 @@ object Extractors {
     private const val MAX_TEXT = 50_000
 
     /** Never throws: any failure is an empty result, which the note records as `extracted: failed`. */
-    fun extract(url: String, fetch: Fetch, post: Post = { _, _, _ -> null }): Extracted = try {
+    fun extract(url: String, fetch: Fetch): Extracted = extract(url, fetch, { _, _, _ -> null })
+
+    fun extract(url: String, fetch: Fetch, post: Post): Extracted = try {
         when (Source.detect(url).source) {
             "youtube" -> youtube(url, fetch, post)
             "instagram" -> instagram(fetch(url, mapOf("User-Agent" to FACEBOOK_UA)))
