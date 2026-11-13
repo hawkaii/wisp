@@ -1,0 +1,96 @@
+name: Build
+
+# Every push to main builds the app and publishes it as a GitHub Release, so
+# there is always a downloadable APK. Pull requests run the same checks and
+# build the APK as an artifact; nothing is published from a branch.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew lintDebug testDebugUnitTest --stacktrace
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ github.sha }}
+          path: |
+            app/build/reports
+            app/build/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  apk:
+    name: Release APK
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      # Signed with the committed throwaway keystore (app/build.gradle.kts), so it installs.
+      - run: ./gradlew assembleRelease --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ github.sha }}
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish release
+    needs: apk
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: app
+        run: echo "version=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk-${{ github.sha }}
+          path: dist
+
+      - name: Name the APK
+        run: mv dist/*.apk "dist/wisp-${{ steps.app.outputs.version }}.apk"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.app.outputs.version }}-${{ github.run_number }}"
+          # A re-run reuses its run number, so replace an existing tag.
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" dist/*.apk \
+            --title "v${{ steps.app.outputs.version }} · build ${{ github.run_number }}" \
+            --generate-notes --latest
