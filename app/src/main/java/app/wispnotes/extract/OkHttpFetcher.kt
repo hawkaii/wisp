@@ -1,5 +1,4 @@
 package app.wispnotes.extract
-package app.wispnotes.extract
 
 import android.util.Log
 import java.util.concurrent.TimeUnit
