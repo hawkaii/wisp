@@ -80,10 +80,12 @@ object TranscriptParser {
 
     fun parseXml(xml: String): List<TranscriptSegment> = runCatching {
         val factory = DocumentBuilderFactory.newInstance().apply {
-            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-            setFeature("http://xml.org/sax/features/external-general-entities", false)
-            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-            isExpandEntityReferences = false
+            // Android's parser rejects some of these features and throws, which
+            // used to empty every transcript on device. Each one is best-effort.
+            runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+            runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
+            runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
+            runCatching { isExpandEntityReferences = false }
         }
         val document = factory.newDocumentBuilder().parse(InputSource(StringReader(xml)))
         val paragraphs = document.getElementsByTagName("p")
