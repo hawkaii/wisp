@@ -1,6 +1,7 @@
 package app.wispnotes.extract
 
 import android.content.Context
+import android.util.Log
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
@@ -37,13 +38,17 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         repo.editInboxNote(name) { Frontmatter.set(it, mapOf("extract_attempts" to nextAttempt.toString())) }
             .getOrElse { return Result.failure() }
 
-        var found = withContext(Dispatchers.IO) { Extractors.extract(url, OkHttpFetcher::get) }
-        if (Source.detect(url).source == "youtube" && found.transcript.isEmpty() && found.transcriptStatus == null) {
+        var found = withContext(Dispatchers.IO) { Extractors.extract(url, OkHttpFetcher::get, OkHttpFetcher::post) }
+        Log.d(TAG, "stage=fast_path status=${found.status} transcript_status=${found.transcriptStatus} count=${found.transcript.size}")
+        if (Source.detect(url).source == "youtube" && found.transcriptStatus != "done") {
+            Log.d(TAG, "stage=webview_start reason=fast_path_incomplete")
             val fallback = YoutubeTranscriptWebView.fetch(applicationContext, url)
-            found = found.copy(
-                transcript = fallback.orEmpty(),
-                transcriptStatus = if (fallback.isNullOrEmpty()) "none" else "done",
-            )
+            Log.d(TAG, "stage=webview_result count=${fallback?.size ?: 0} error=${fallback == null}")
+            if (!fallback.isNullOrEmpty()) {
+                found = found.copy(transcript = fallback, transcriptStatus = "done")
+            } else if (found.transcriptStatus != "none") {
+                found = found.copy(transcriptStatus = "none")
+            }
         }
         // Nothing found: try again (offline, slow server) before recording "failed".
         if (found.status == "failed" && nextAttempt < MAX_ATTEMPTS) return Result.retry()
@@ -54,8 +59,9 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     }
 
     companion object {
+        private const val TAG = "WispTranscript"
         private const val KEY_FILE = "file"
-        private const val MAX_ATTEMPTS = 3
+        const val MAX_ATTEMPTS = 3
 
         fun enqueue(context: Context, fileName: String, replace: Boolean = false) {
             val request = OneTimeWorkRequestBuilder<ExtractWorker>()

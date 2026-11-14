@@ -24,6 +24,11 @@ class TranscriptTest {
         assertEquals(2, lines.size)
     }
 
+    @Test fun parsesTimedTextParagraphsWithWordSpans() {
+        val segments = TranscriptParser.parseXml(transcriptFixture("yt_transcript_p.xml"))
+        assertEquals(listOf(TranscriptSegment(0, "Hello from the talk. This is spoken text."), TranscriptSegment(2, "Here is another sentence.")), segments)
+    }
+
     @Test fun noCaptionsReturnsNoTrack() {
         assertEquals(null, TranscriptParser.captionTrack(transcriptFixture("yt_no_captions.html")))
         assertTrue(TranscriptParser.parseCaptionBody("").isEmpty())

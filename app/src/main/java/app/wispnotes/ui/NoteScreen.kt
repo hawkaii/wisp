@@ -55,6 +55,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.wispnotes.index.NoteEntry
+import app.wispnotes.extract.ExtractWorker
 import app.wispnotes.note.Publish
 import app.wispnotes.note.Review
 import app.wispnotes.note.Source
@@ -104,10 +105,12 @@ fun NoteScreen(fileName: String, shared: Shared?, onBack: () -> Unit, vm: NoteVi
                             e = e,
                             canFinish = Review.hasEnoughNotes(notes),
                             finishing = finishing,
+                            retryTranscript = e.source == "youtube" && (note.transcriptStatus == "none" || e.extractAttempts >= ExtractWorker.MAX_ATTEMPTS),
                             onStart = vm::start,
                             onOpen = { uriHandler.openUri(e.url) },
                             onFinish = { finishing = true },
                             onPublish = { publish = !publish },
+                            onRetryTranscript = vm::retryTranscript,
                         )
                     }
                     item {
@@ -188,12 +191,17 @@ private fun Actions(
     e: NoteEntry,
     canFinish: Boolean,
     finishing: Boolean,
+    retryTranscript: Boolean,
     onStart: () -> Unit,
     onOpen: () -> Unit,
     onFinish: () -> Unit,
     onPublish: () -> Unit,
+    onRetryTranscript: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (retryTranscript) {
+            WispButton("Retry transcript", onRetryTranscript)
+        }
         when (e.status) {
             "in-progress" -> {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

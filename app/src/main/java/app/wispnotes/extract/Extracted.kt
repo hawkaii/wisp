@@ -24,6 +24,7 @@ data class Extracted(
 
 /** Blocking GET. Returns the body, or null on any failure. Callers run it off the main thread. */
 typealias Fetch = (url: String, headers: Map<String, String>) -> String?
+typealias Post = (url: String, headers: Map<String, String>, body: String) -> String?
 
 const val WORDS_PER_MINUTE = 230
 

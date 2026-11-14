@@ -11,7 +11,7 @@ data class TranscriptSegment(val startSeconds: Int, val text: String)
 
 data class TranscriptLine(val startSeconds: Int, val text: String)
 
-data class CaptionTrack(val baseUrl: String, val languageCode: String)
+data class CaptionTrack(val baseUrl: String, val languageCode: String, val kind: String? = null)
 
 data class TranscriptResult(
     val lines: List<TranscriptLine>,
@@ -20,24 +20,38 @@ data class TranscriptResult(
 
 /** Pure YouTube transcript parsing. Network and WebView code stay outside this file. */
 object TranscriptParser {
-    fun captionTrack(html: String?, preferredLanguage: String? = null): CaptionTrack? {
-        val player = playerResponse(html) ?: return null
-        val tracks = player.optJSONObject("captions")
-            ?.optJSONObject("playerCaptionsTracklistRenderer")
-            ?.optJSONArray("captionTracks")
-            ?: return null
-        if (tracks.length() == 0) return null
+    fun captionTrack(html: String?, preferredLanguage: String? = null): CaptionTrack? =
+        captionTrackFromPlayer(playerResponse(html), preferredLanguage)
+
+    fun captionTrackFromJson(json: String?, preferredLanguage: String? = null): CaptionTrack? =
+        captionTrackFromPlayer(runCatching { json?.let(::JSONObject) }.getOrNull(), preferredLanguage)
+
+    fun hasCaptionTracks(json: String?): Boolean = captionTracks(runCatching { json?.let(::JSONObject) }.getOrNull()).isNotEmpty()
+
+    fun videoId(html: String?): String? = playerResponse(html)?.optJSONObject("videoDetails")?.optString("videoId")?.takeIf { it.isNotBlank() }
+
+    private fun captionTrackFromPlayer(player: JSONObject?, preferredLanguage: String?): CaptionTrack? {
+        val choices = captionTracks(player)
+        if (choices.isEmpty()) return null
         val preferred = preferredLanguage?.lowercase()?.substringBefore('-')
-        val choices = (0 until tracks.length()).mapNotNull { i ->
+        fun languageMatches(track: CaptionTrack, language: String?) = language != null &&
+            (track.languageCode.equals(language, ignoreCase = true) || track.languageCode.lowercase().startsWith("$language-"))
+        fun best(language: String?) = choices.firstOrNull { languageMatches(it, language) && it.kind != "asr" }
+            ?: choices.firstOrNull { languageMatches(it, language) }
+        return best(preferredLanguage) ?: best(preferred) ?: best("en")
+            ?: choices.firstOrNull { it.kind != "asr" } ?: choices.firstOrNull()
+    }
+
+    private fun captionTracks(player: JSONObject?): List<CaptionTrack> {
+        val tracks = player?.optJSONObject("captions")
+            ?.optJSONObject("playerCaptionsTracklistRenderer")
+            ?.optJSONArray("captionTracks") ?: return emptyList()
+        return (0 until tracks.length()).mapNotNull { i ->
             tracks.optJSONObject(i)?.let { track ->
                 val url = track.optString("baseUrl")
-                if (url.isBlank()) null else CaptionTrack(url, track.optString("languageCode"))
+                if (url.isBlank()) null else CaptionTrack(url, track.optString("languageCode"), track.optString("kind").takeIf { it.isNotBlank() })
             }
         }
-        return choices.firstOrNull { it.languageCode.equals(preferredLanguage, ignoreCase = true) }
-            ?: choices.firstOrNull { preferred != null && it.languageCode.lowercase().startsWith(preferred) }
-            ?: choices.firstOrNull { it.languageCode.equals("en", ignoreCase = true) }
-            ?: choices.firstOrNull()
     }
 
     fun json3Url(baseUrl: String) = baseUrl + if ('?' in baseUrl) "&fmt=json3" else "?fmt=json3"
@@ -66,12 +80,26 @@ object TranscriptParser {
 
     fun parseXml(xml: String): List<TranscriptSegment> = runCatching {
         val factory = DocumentBuilderFactory.newInstance().apply {
-            setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
-            setFeature("http://xml.org/sax/features/external-general-entities", false)
-            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
-            isExpandEntityReferences = false
+            // Android's parser rejects some of these features and throws, which
+            // used to empty every transcript on device. Each one is best-effort.
+            runCatching { setFeature("http://apache.org/xml/features/disallow-doctype-decl", true) }
+            runCatching { setFeature("http://xml.org/sax/features/external-general-entities", false) }
+            runCatching { setFeature("http://xml.org/sax/features/external-parameter-entities", false) }
+            runCatching { isExpandEntityReferences = false }
         }
-        val nodes = factory.newDocumentBuilder().parse(InputSource(StringReader(xml))).getElementsByTagName("text")
+        val document = factory.newDocumentBuilder().parse(InputSource(StringReader(xml)))
+        val paragraphs = document.getElementsByTagName("p")
+        if (paragraphs.length > 0) {
+            return@runCatching buildList {
+                for (i in 0 until paragraphs.length) {
+                    val node = paragraphs.item(i)
+                    val startMs = node.attributes?.getNamedItem("t")?.nodeValue?.toLongOrNull()
+                    val text = node.textContent.clean()
+                    if (startMs != null && text.isNotEmpty()) add(TranscriptSegment((startMs / 1000L).toInt(), text))
+                }
+            }
+        }
+        val nodes = document.getElementsByTagName("text")
         buildList {
             for (i in 0 until nodes.length) {
                 val node = nodes.item(i)

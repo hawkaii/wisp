@@ -3,6 +3,7 @@ package app.wispnotes.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.wispnotes.extract.ExtractWorker
 import app.wispnotes.index.NoteEntry
 import app.wispnotes.index.WispDb
 import app.wispnotes.note.Frontmatter
@@ -84,6 +85,20 @@ class NoteViewModel(app: Application) : AndroidViewModel(app) {
     fun start() = change(mapOf("status" to "in-progress"))
 
     fun finish(rating: Int) = change(Review.finishValues(rating, LocalDate.now()))
+
+    fun retryTranscript() = viewModelScope.launch {
+        val file = ui.value?.fileName ?: return@launch
+        withContext(NonCancellable) {
+            lock.withLock {
+                repo.editInboxNote(file) {
+                    Frontmatter.set(it, mapOf("extracted" to "pending", "extract_attempts" to "0", "transcript" to "pending"))
+                }.onSuccess { content ->
+                    show(file, content, resetNotes = false)
+                    ExtractWorker.enqueue(getApplication(), file, replace = true)
+                }
+            }
+        }
+    }
 
     private fun change(values: Map<String, String>) {
         saveJob?.cancel()
