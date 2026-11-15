@@ -8,17 +8,20 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +41,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.wispnotes.R
@@ -83,11 +88,16 @@ class ShareActivity : ComponentActivity() {
 
         setContent {
             WispTheme {
-                Box(
-                    Modifier.fillMaxSize().background(Color(0xD90B0A0F)).clickable(role = Role.Button) { finish() },
+                // The scrim shrinks with the keyboard, so the cap below is the space the sheet really has.
+                BoxWithConstraints(
+                    Modifier
+                        .fillMaxSize()
+                        .background(Color(0xD90B0A0F))
+                        .imePadding()
+                        .clickable(role = Role.Button) { finish() },
                     contentAlignment = Alignment.BottomCenter,
                 ) {
-                    SaveSheet(url, title, repo) { finish() }
+                    SaveSheet(url, title, repo, maxHeight = maxHeight * 0.92f) { finish() }
                 }
             }
         }
@@ -95,7 +105,13 @@ class ShareActivity : ComponentActivity() {
 }
 
 @Composable
-private fun SaveSheet(url: String, initialTitle: String, repo: VaultRepository, close: () -> Unit) {
+private fun SaveSheet(
+    url: String,
+    initialTitle: String,
+    repo: VaultRepository,
+    maxHeight: Dp,
+    close: () -> Unit,
+) {
     var title by remember { mutableStateOf(initialTitle) }
     var titleEdited by remember { mutableStateOf(initialTitle.isNotBlank()) }
     var caption by remember { mutableStateOf("") }
@@ -140,133 +156,169 @@ private fun SaveSheet(url: String, initialTitle: String, repo: VaultRepository, 
     Column(
         Modifier
             .fillMaxWidth()
+            .heightIn(max = maxHeight)
             .clickable(enabled = false) {}
             .clip(shape)
             .background(WispColors.Purple)
-            .navigationBarsPadding()
-            .padding(18.dp),
+            .navigationBarsPadding(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (needLogin) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Ghost(64.dp)
-                androidx.compose.material3.Icon(painterResource(R.drawable.stk_link), null, tint = Color.Unspecified, modifier = Modifier.size(48.dp))
+        // The body grows with the content, then scrolls. The footer below never scrolls, so a
+        // 2,000-character caption cannot push Save off the bottom of the screen (#12).
+        Column(
+            Modifier
+                .weight(1f, fill = false)
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(top = 18.dp, bottom = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            when {
+                needLogin -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Ghost(64.dp)
+                        androidx.compose.material3.Icon(painterResource(R.drawable.stk_link), null, tint = Color.Unspecified, modifier = Modifier.size(48.dp))
+                    }
+                    Text("Saved.", style = MaterialTheme.typography.headlineMedium)
+                    Text("Log in to Meta AI in Settings to get a summary.", color = WispColors.Haze)
+                }
+                caught -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Ghost(64.dp)
+                        androidx.compose.material3.Icon(painterResource(R.drawable.stk_link), null, tint = Color.Unspecified, modifier = Modifier.size(48.dp))
+                    }
+                    Text("Caught it!", style = MaterialTheme.typography.headlineMedium)
+                    Text(
+                        "\"${title.ifBlank { preview?.title ?: fallbackTitle(url) }}\" is in the pot.",
+                        color = WispColors.Haze,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        info.tags.forEach { WispChip("#$it") }
+                        preview?.minutes?.let { WispChip("~$it min") }
+                    }
+                }
+                else -> {
+                    Ghost(64.dp)
+                    Text("Save to Wisp", style = MaterialTheme.typography.titleMedium)
+                    Text("${info.source} · ${info.type}", color = WispColors.Haze)
+                    Preview(preview, loading = url.isNotBlank() && preview == null)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { info.tags.forEach { WispChip("#$it") } }
+                    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WispColors.Ink).padding(12.dp)) {
+                        BasicTextField(
+                            value = title,
+                            onValueChange = {
+                                title = it
+                                titleEdited = true
+                            },
+                            textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                            cursorBrush = SolidColor(WispColors.Pumpkin),
+                            modifier = Modifier.fillMaxWidth(),
+                            // Four lines, then the field scrolls inside itself: a caption is not a headline.
+                            maxLines = 4,
+                            decorationBox = { inner ->
+                                if (title.isEmpty()) Text("Reading the page…", color = WispColors.Lavender)
+                                inner()
+                            },
+                        )
+                    }
+                    if (preview?.status == "failed") {
+                        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WispColors.Ink).padding(12.dp)) {
+                            BasicTextField(
+                                value = caption,
+                                onValueChange = { caption = it },
+                                textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
+                                cursorBrush = SolidColor(WispColors.Pumpkin),
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 3,
+                                decorationBox = { inner ->
+                                    if (caption.isEmpty()) Text("Paste caption", color = WispColors.Lavender)
+                                    inner()
+                                },
+                            )
+                        }
+                    }
+                    status?.let { Text(it, color = WispColors.Haze) }
+                }
             }
-            Text("Saved.", style = MaterialTheme.typography.headlineMedium)
-            Text("Log in to Meta AI in Settings to get a summary.", color = WispColors.Haze)
-            WispButton(
-                "Log in to Meta AI",
-                onClick = { ctx.startActivity(ReaderActivity.loginIntent(ctx)); close() },
-                modifier = Modifier.fillMaxWidth(),
-                color = WispColors.Pumpkin,
-                textColor = WispColors.Void,
-            )
-            WispButton("Done", close, Modifier.fillMaxWidth(), color = WispColors.Purple, textColor = Color.White)
-        } else if (caught) {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Ghost(64.dp)
-                androidx.compose.material3.Icon(painterResource(R.drawable.stk_link), null, tint = Color.Unspecified, modifier = Modifier.size(48.dp))
-            }
-            Text("Caught it!", style = MaterialTheme.typography.headlineMedium)
-            Text(
-                "\"${title.ifBlank { preview?.title ?: fallbackTitle(url) }}\" is in the pot.",
-                color = WispColors.Haze,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                info.tags.forEach { WispChip("#$it") }
-                preview?.minutes?.let { WispChip("~$it min") }
-            }
-            WispButton("Done", close, Modifier.fillMaxWidth())
-            Text("Closes by itself in 3 s", color = WispColors.Haze, style = MaterialTheme.typography.bodySmall)
-        } else {
-            Ghost(64.dp)
-            Text("Save to Wisp", style = MaterialTheme.typography.titleMedium)
-            Text("${info.source} · ${info.type}", color = WispColors.Haze)
-            Preview(preview, loading = url.isNotBlank() && preview == null)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { info.tags.forEach { WispChip("#$it") } }
-            Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WispColors.Ink).padding(12.dp)) {
-                BasicTextField(
-                    value = title,
-                    onValueChange = {
-                        title = it
-                        titleEdited = true
-                    },
-                    textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
-                    cursorBrush = SolidColor(WispColors.Pumpkin),
-                    modifier = Modifier.fillMaxWidth(),
-                    decorationBox = { inner ->
-                        if (title.isEmpty()) Text("Reading the page…", color = WispColors.Lavender)
-                        inner()
-                    },
-                )
-            }
-            if (preview?.status == "failed") {
-                Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WispColors.Ink).padding(12.dp)) {
-                    BasicTextField(
-                        value = caption,
-                        onValueChange = { caption = it },
-                        textStyle = TextStyle(color = Color.White, fontSize = 16.sp),
-                        cursorBrush = SolidColor(WispColors.Pumpkin),
+        }
+
+        // Always visible, always last, and close to the thumb.
+        Column(
+            Modifier.fillMaxWidth().padding(start = 18.dp, end = 18.dp, bottom = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            when {
+                needLogin -> {
+                    WispButton(
+                        "Log in to Meta AI",
+                        onClick = { ctx.startActivity(ReaderActivity.loginIntent(ctx)); close() },
                         modifier = Modifier.fillMaxWidth(),
-                        decorationBox = { inner ->
-                            if (caption.isEmpty()) Text("Paste caption", color = WispColors.Lavender)
-                            inner()
+                        color = WispColors.Pumpkin,
+                        textColor = WispColors.Void,
+                    )
+                    WispButton("Done", close, Modifier.fillMaxWidth(), color = WispColors.Purple, textColor = Color.White)
+                }
+                caught -> {
+                    WispButton("Done", close, Modifier.fillMaxWidth())
+                    Text("Closes by itself in 3 s", color = WispColors.Haze, style = MaterialTheme.typography.bodySmall)
+                }
+                else -> {
+                    WispButton(
+                        label = if (saving) "Saving…" else "Save",
+                        onClick = {
+                            if (!saving) {
+                                scope.launch {
+                                    saving = true
+                                    if (!titleEdited && title.isBlank() && url.isNotBlank()) {
+                                        withTimeoutOrNull(3_000) {
+                                            while (preview?.title == null) delay(40)
+                                        }
+                                    }
+                                    if (!repo.hasAccess()) {
+                                        saving = false
+                                        status = "Open Wisp and pick a vault first."
+                                        return@launch
+                                    }
+                                    val savedTitle = title.trim().ifEmpty { preview?.title ?: fallbackTitle(url) }
+                                    val draft = NoteDraft(info, url, savedTitle, LocalDate.now(), caption)
+                                    repo.writeInboxNote(Note.fileName(draft), Note.render(draft))
+                                        .onSuccess { name ->
+                                            if (url.isNotBlank()) ExtractWorker.enqueue(ctx, name)
+                                            title = savedTitle
+                                            if (info.source == "instagram" && info.type == "reel") {
+                                                // A reel's page has no readable text, so Meta AI is the only reader.
+                                                // Off by default: the note is saved and nothing leaves the phone.
+                                                val action = ReelPolicy.action(
+                                                    MetaSettings.summarise(ctx).first(),
+                                                    MetaSettings.loginState(ctx).first(),
+                                                )
+                                                when (action) {
+                                                    ReelAction.ReadNow -> {
+                                                        ctx.startActivity(ReaderActivity.intent(ctx, name))
+                                                        close()
+                                                    }
+                                                    ReelAction.SaveAndWarnLogin -> needLogin = true
+                                                    ReelAction.SaveOnly -> caught = true
+                                                }
+                                            } else {
+                                                caught = true
+                                            }
+                                        }
+                                        .onFailure { status = "Could not save: ${it.message}" }
+                                    saving = false
+                                }
+                            }
                         },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !saving,
                     )
                 }
             }
-            status?.let { Text(it, color = WispColors.Haze) }
-            WispButton(
-                label = if (saving) "Saving…" else "Save",
-                onClick = {
-                    if (!saving) {
-                        scope.launch {
-                        saving = true
-                        if (!titleEdited && title.isBlank() && url.isNotBlank()) {
-                            withTimeoutOrNull(3_000) {
-                                while (preview?.title == null) delay(40)
-                            }
-                        }
-                        if (!repo.hasAccess()) {
-                            saving = false
-                            status = "Open Wisp and pick a vault first."
-                            return@launch
-                        }
-                        val savedTitle = title.trim().ifEmpty { preview?.title ?: fallbackTitle(url) }
-                        val draft = NoteDraft(info, url, savedTitle, LocalDate.now(), caption)
-                        repo.writeInboxNote(Note.fileName(draft), Note.render(draft))
-                            .onSuccess { name ->
-                                if (url.isNotBlank()) ExtractWorker.enqueue(ctx, name)
-                                title = savedTitle
-                                if (info.source == "instagram" && info.type == "reel") {
-                                    // A reel's page has no readable text, so Meta AI is the only reader.
-                                    // Off by default: the note is saved and nothing leaves the phone.
-                                    val action = ReelPolicy.action(
-                                        MetaSettings.summarise(ctx).first(),
-                                        MetaSettings.loginState(ctx).first(),
-                                    )
-                                    when (action) {
-                                        ReelAction.ReadNow -> {
-                                            ctx.startActivity(ReaderActivity.intent(ctx, name))
-                                            close()
-                                        }
-                                        ReelAction.SaveAndWarnLogin -> needLogin = true
-                                        ReelAction.SaveOnly -> caught = true
-                                    }
-                                } else {
-                                    caught = true
-                                }
-                            }
-                            .onFailure { status = "Could not save: ${it.message}" }
-                        saving = false
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !saving,
-            )
-            Spacer(Modifier.height(2.dp))
         }
     }
 }
