@@ -48,7 +48,10 @@ import app.wispnotes.extract.OkHttpFetcher
 import app.wispnotes.note.Note
 import app.wispnotes.note.NoteDraft
 import app.wispnotes.note.Source
+import app.wispnotes.reader.MetaSettings
 import app.wispnotes.reader.ReaderActivity
+import app.wispnotes.reader.ReelAction
+import app.wispnotes.reader.ReelPolicy
 import app.wispnotes.ui.Ghost
 import app.wispnotes.ui.WispButton
 import app.wispnotes.ui.WispChip
@@ -61,6 +64,7 @@ import java.net.URI
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -99,6 +103,7 @@ private fun SaveSheet(url: String, initialTitle: String, repo: VaultRepository, 
     var preview by remember { mutableStateOf<Extracted?>(null) }
     var saving by remember { mutableStateOf(false) }
     var caught by remember { mutableStateOf(false) }
+    var needLogin by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val info = remember(url) { Source.detect(url) }
@@ -143,7 +148,22 @@ private fun SaveSheet(url: String, initialTitle: String, repo: VaultRepository, 
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (caught) {
+        if (needLogin) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Ghost(64.dp)
+                androidx.compose.material3.Icon(painterResource(R.drawable.stk_link), null, tint = Color.Unspecified, modifier = Modifier.size(48.dp))
+            }
+            Text("Saved.", style = MaterialTheme.typography.headlineMedium)
+            Text("Log in to Meta AI in Settings to get a summary.", color = WispColors.Haze)
+            WispButton(
+                "Log in to Meta AI",
+                onClick = { ctx.startActivity(ReaderActivity.loginIntent(ctx)); close() },
+                modifier = Modifier.fillMaxWidth(),
+                color = WispColors.Pumpkin,
+                textColor = WispColors.Void,
+            )
+            WispButton("Done", close, Modifier.fillMaxWidth(), color = WispColors.Purple, textColor = Color.White)
+        } else if (caught) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Ghost(64.dp)
                 androidx.compose.material3.Icon(painterResource(R.drawable.stk_link), null, tint = Color.Unspecified, modifier = Modifier.size(48.dp))
@@ -220,9 +240,20 @@ private fun SaveSheet(url: String, initialTitle: String, repo: VaultRepository, 
                                 if (url.isNotBlank()) ExtractWorker.enqueue(ctx, name)
                                 title = savedTitle
                                 if (info.source == "instagram" && info.type == "reel") {
-                                    // A reel has no readable text in its page: Meta AI is the only reader.
-                                    ctx.startActivity(ReaderActivity.intent(ctx, name))
-                                    close()
+                                    // A reel's page has no readable text, so Meta AI is the only reader.
+                                    // Off by default: the note is saved and nothing leaves the phone.
+                                    val action = ReelPolicy.action(
+                                        MetaSettings.summarise(ctx).first(),
+                                        MetaSettings.loggedIn(ctx).first(),
+                                    )
+                                    when (action) {
+                                        ReelAction.ReadNow -> {
+                                            ctx.startActivity(ReaderActivity.intent(ctx, name))
+                                            close()
+                                        }
+                                        ReelAction.SaveAndWarnLogin -> needLogin = true
+                                        ReelAction.SaveOnly -> caught = true
+                                    }
                                 } else {
                                     caught = true
                                 }

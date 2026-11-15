@@ -71,15 +71,8 @@ object ReaderScript {
           /* A phone WebView is always a brand-new guest, so this is the first thing it meets. */
           function gateOpen() { return /date of birth/i.test(pageText()); }
 
-          function loginWall() {
-            if (/log in to|sign in to continue|continue with facebook/i.test(pageText())) return true;
-            var links = document.querySelectorAll('a[href*="login"]');
-            for (var i = 0; i < links.length; i++) {
-              var r = links[i].getBoundingClientRect();
-              if (r.width > 0 && r.height > 0) return true;
-            }
-            return false;
-          }
+          /* meta.ai's own sign-out marker. The only login signal the page gives that is worth trusting. */
+          function signedOut() { return !!document.querySelector('[data-testid="login-button"]'); }
 
           function waitFor(fn, ms) {
             var deadline = Date.now() + ms;
@@ -212,8 +205,15 @@ object ReaderScript {
               return false;
             }
             run.stage = 'composer';
-            var box = await waitFor(composer, 50000);
-            if (!box) return gateOpen() ? waitForUser() : fail(loginWall() ? 'needs_login' : 'composer_not_ready');
+            var box = null, lookUntil = Date.now() + 45000;
+            while (Date.now() < lookUntil) {
+              box = composer();
+              if (box) break;
+              if (gateOpen()) return waitForUser();
+              if (signedOut()) return fail('needs_login');
+              await sleep(500);
+            }
+            if (!box) return fail('composer_not_ready');
             run.stage = 'typing';
             if (!(await fill(box, url + '\n' + prompt))) return gateOpen() ? waitForUser() : fail('composer_rejected');
             var send = await waitFor(sendButton, 8000);
@@ -266,7 +266,7 @@ object ReaderScript {
                 chatUrl: run.chatUrl,
                 composer: !!box,
                 gate: run.gate || (!box && gateOpen()),
-                login: !box && !run.gate && loginWall(),
+                login: signedOut(),
                 answers: answers().length,
                 tap: run.tap,
                 page: location.href

@@ -115,6 +115,8 @@ class ReaderScriptTest {
         assertTrue(ReaderScript.INSTALL.contains("input[aria-label=\"Ask Meta AI\"]"))
         assertTrue(ReaderScript.INSTALL.contains("button[aria-label=\"Send\"]"))
         assertTrue(ReaderScript.INSTALL.contains("date of birth"))
+        // the login signal is meta.ai's own button, not text guessed from the page
+        assertTrue(ReaderScript.INSTALL.contains("login-button"))
         // Send is a real touch from Kotlin, not a scripted click
         assertTrue(ReaderScript.INSTALL.contains("run.tap = rectOf(send)"))
         assertTrue(ReaderScript.INSTALL.contains("tapped: function"))

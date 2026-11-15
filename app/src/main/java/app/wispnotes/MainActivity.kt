@@ -8,6 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.wispnotes.reader.MetaSettings
 import app.wispnotes.ui.WispApp
 import app.wispnotes.ui.theme.WispTheme
 import app.wispnotes.vault.SafVaultRepository
@@ -25,6 +26,10 @@ data class AppState(
     val vaultLost: Boolean = false,
     /** Readable vault location for Settings, without the provider prefix. */
     val vaultPath: String = "",
+    /** Settings > Meta AI: summarise a shared reel. Off by default. */
+    val summariseReels: Boolean = false,
+    /** The last live check of meta.ai's login button. A hint, not the authority. */
+    val metaLoggedIn: Boolean = false,
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -36,7 +41,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() = viewModelScope.launch {
         val uri = repo.vaultUri.first()
         val ok = uri != null && repo.hasAccess()
-        _state.value = AppState(true, repo.isOnboarded(), ok, uri != null && !ok, uri?.lastPathSegment.orEmpty().substringAfter(':'))
+        _state.value = AppState(
+            loaded = true,
+            onboarded = repo.isOnboarded(),
+            vaultOk = ok,
+            vaultLost = uri != null && !ok,
+            vaultPath = uri?.lastPathSegment.orEmpty().substringAfter(':'),
+            summariseReels = MetaSettings.summarise(getApplication()).first(),
+            metaLoggedIn = MetaSettings.loggedIn(getApplication()).first(),
+        )
+    }
+
+    fun setSummariseReels(on: Boolean) = viewModelScope.launch {
+        MetaSettings.setSummarise(getApplication(), on)
+        refresh()
     }
 
     fun pickVault(uri: Uri) = viewModelScope.launch {

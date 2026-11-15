@@ -59,33 +59,41 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
  * Reads one saved reel with meta.ai in a real, visible WebView and writes the answer into the note's
- * `## AI` section.
+ * `## AI` section. A second mode, [loginIntent], is the same WebView with no note attached: the user
+ * signs in to meta.ai once, and the session stays in this app's cookie jar.
  *
  * Why an Activity and not a background job: meta.ai paints its composer only for a surface that is
  * actually on screen. The old desktop hang was a hidden tab that never painted, and a WebView inside a
  * WorkManager job has the same problem, so the reader owns the screen for the ~30 s it takes.
- *
- * This code needs no account. Whatever session the WebView carries (guest, or one the user signs in to
- * by hand) is the one it uses, and nothing leaves the phone but the request to meta.ai.
  */
 class ReaderActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val noteFile = intent.getStringExtra(EXTRA_FILE).orEmpty()
+        val login = intent.getBooleanExtra(EXTRA_LOGIN, false)
         // meta.ai streams for a while: the screen must not sleep and stop painting mid-answer.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
             WispTheme {
-                if (noteFile.isBlank()) ReaderMissing { finish() } else ReaderScreen(noteFile) { finish() }
+                when {
+                    login -> LoginScreen { finish() }
+                    noteFile.isBlank() -> ReaderMissing { finish() }
+                    else -> ReaderScreen(noteFile) { finish() }
+                }
             }
         }
     }
 
     companion object {
         private const val EXTRA_FILE = "file"
+        private const val EXTRA_LOGIN = "login"
 
         fun intent(context: Context, noteFile: String): Intent =
             Intent(context, ReaderActivity::class.java).putExtra(EXTRA_FILE, noteFile)
+
+        /** Sign in to meta.ai only: no note, nothing is read. */
+        fun loginIntent(context: Context): Intent =
+            Intent(context, ReaderActivity::class.java).putExtra(EXTRA_LOGIN, true)
     }
 }
 
@@ -120,13 +128,7 @@ private fun ReaderScreen(noteFile: String, onClose: () -> Unit) {
     // The client is installed once, so a page reload starts the run again but a recomposition does not.
     val latestReel = rememberUpdatedState(reel)
     val view = remember(ctx) {
-        WebView(ctx).apply {
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            settings.javaScriptEnabled = true
-            settings.domStorageEnabled = true
-            settings.userAgentString = MOBILE_UA
-            setBackgroundColor(AndroidColor.WHITE)
-            if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
+        newMetaWebView(ctx).apply {
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(page: WebView, loaded: String) {
                     Log.d(TAG, "stage=page_finished url=$loaded")
@@ -231,6 +233,91 @@ private fun ReaderScreen(noteFile: String, onClose: () -> Unit) {
     }
 }
 
+/**
+ * Sign in to meta.ai once, in the same WebView and the same cookie jar the reader uses. The app never
+ * sees a password: the page is the page. The birth-year check can appear here too, and belongs here.
+ */
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun LoginScreen(onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    var signedIn by remember { mutableStateOf(false) }
+    var ready by remember { mutableStateOf(false) }
+    val view = remember(ctx) {
+        newMetaWebView(ctx).apply {
+            webViewClient = object : WebViewClient() {
+                override fun onPageFinished(page: WebView, url: String) {
+                    page.evaluateJavascript(ReaderScript.INSTALL, null)
+                }
+            }
+            loadUrl(ReaderScript.HOME)
+        }
+    }
+
+    DisposableEffect(view) {
+        onDispose {
+            view.stopLoading()
+            view.destroy()
+        }
+    }
+
+    LaunchedEffect(view) {
+        var saved: Boolean? = null
+        while (true) {
+            delay(POLL_MS)
+            val now = ReaderState.parse(view.eval(ReaderScript.state()))
+            if (now == null) {
+                view.eval(ReaderScript.INSTALL)
+                continue
+            }
+            // Wait for a page that has made up its mind: a composer, or a login button.
+            if (!now.composer && !now.login) continue
+            ready = true
+            signedIn = !now.login
+            if (saved != signedIn) {
+                saved = signedIn
+                // A failed write must not kill the poll: the reader checks the page itself anyway.
+                runCatching { MetaSettings.setLoggedIn(ctx, signedIn) }
+                Log.d(TAG, "stage=login signed_in=$signedIn")
+            }
+        }
+    }
+
+    Column(Modifier.fillMaxSize().background(WispColors.Void).statusBarsPadding().navigationBarsPadding()) {
+        AndroidView(factory = { view }, modifier = Modifier.weight(1f).fillMaxWidth())
+        LoginBar(signedIn = signedIn, ready = ready, onClose = onClose)
+    }
+}
+
+@Composable
+private fun LoginBar(signedIn: Boolean, ready: Boolean, onClose: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(14.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(WispColors.Purple)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("Log in to Meta AI", style = MaterialTheme.typography.titleMedium)
+        Text(
+            when {
+                signedIn -> "Signed in. You can close this."
+                ready -> "Not signed in yet. Use Log in on the page above."
+                else -> "Opening meta.ai…"
+            },
+            color = WispColors.Haze,
+        )
+        Text(
+            "If meta.ai asks your birth year, answer it here too. The session stays on this phone.",
+            color = WispColors.Lavender,
+            style = MaterialTheme.typography.bodySmall,
+        )
+        WispButton("Close", onClose, Modifier.fillMaxWidth(), color = WispColors.Ink, textColor = Color.White, compact = true)
+    }
+}
+
 @Composable
 private fun ReaderBar(
     state: ReaderState,
@@ -254,7 +341,7 @@ private fun ReaderBar(
         Text(saveError ?: state.label(), color = WispColors.Haze)
         if (state.done) Text("${state.answer.length} characters · ${state.links.size} links", color = WispColors.Lavender)
         if (state.failed && state.error == "needs_login") {
-            Text("Sign in on the page above, then continue.", color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall)
+            Text("Signed out. Log in on the page above, then tap Continue.", color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             when {
@@ -279,6 +366,17 @@ private fun ReaderBar(
             }
         }
     }
+}
+
+/** One place for the WebView settings the reader and the login screen share. */
+@SuppressLint("SetJavaScriptEnabled")
+private fun newMetaWebView(ctx: Context): WebView = WebView(ctx).apply {
+    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+    settings.javaScriptEnabled = true
+    settings.domStorageEnabled = true
+    settings.userAgentString = MOBILE_UA
+    setBackgroundColor(AndroidColor.WHITE)
+    if (BuildConfig.DEBUG) WebView.setWebContentsDebuggingEnabled(true)
 }
 
 /** Writes the answer into `## AI` and updates the index, so the note screen shows it without a rescan. */
