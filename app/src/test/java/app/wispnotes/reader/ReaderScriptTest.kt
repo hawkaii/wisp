@@ -115,7 +115,9 @@ class ReaderScriptTest {
         assertTrue(ReaderScript.INSTALL.contains("input[aria-label=\"Ask Meta AI\"]"))
         assertTrue(ReaderScript.INSTALL.contains("button[aria-label=\"Send\"]"))
         assertTrue(ReaderScript.INSTALL.contains("date of birth"))
-        assertTrue(ReaderScript.INSTALL.contains("pointerdown"))
+        // Send is a real touch from Kotlin, not a scripted click
+        assertTrue(ReaderScript.INSTALL.contains("run.tap = rectOf(send)"))
+        assertTrue(ReaderScript.INSTALL.contains("tapped: function"))
     }
 
     /** The mobile Send ignores scripted clicks, so the page hands Kotlin a point for a real touch. */
