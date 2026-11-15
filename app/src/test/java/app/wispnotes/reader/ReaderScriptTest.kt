@@ -82,4 +82,39 @@ class ReaderScriptTest {
         assertEquals("This took more than six minutes. Try again.", ReaderState.idle.copy(stage = "failed", error = "timeout").label())
         assertEquals("Reading the reel. About 30 seconds.", ReaderState.idle.copy(stage = "reading").label())
     }
+
+    /** The mobile page has no `data-testid` composer, and a fresh guest is asked for a birth year. */
+    @Test fun theBirthYearGateIsAStageTheUserFinishesNotAFailure() {
+        val s = ReaderState.parse("""{"stage":"needs_setup","gate":true,"composer":false,"answers":0,"links":[]}""")
+        requireNotNull(s)
+        assertTrue(s.waitingForUser)
+        assertFalse(s.failed)
+        assertFalse(s.done)
+        assertTrue(s.gate)
+        assertTrue(s.label().contains("birth year"))
+        assertTrue(s.label().contains("Continue"))
+    }
+
+    @Test fun aGateFollowedByAnAnswerIsVisibleToTheApp() {
+        val s = ReaderState.parse("""{"stage":"needs_setup","gate":true,"answers":1,"links":[]}""")
+        requireNotNull(s)
+        // the page carried on by itself; the watcher sees an answer and harvests it
+        assertTrue(s.waitingForUser)
+        assertEquals(1, s.answers)
+    }
+
+    @Test fun resumeIsQuotedLikeStart() {
+        val js = ReaderScript.resume("https://www.instagram.com/reel/Dfsp4y0gEXH/")
+        assertTrue(js.contains("window.__wisp.resume("))
+        assertTrue(js.contains("\"https://www.instagram.com/reel/Dfsp4y0gEXH/\""))
+        assertFalse(js.contains("\n"))
+    }
+
+    @Test fun theMobilePageIsTriedAfterTheDesktopOne() {
+        // the one line that broke the first build: mobile meta.ai has no data-testid composer
+        assertTrue(ReaderScript.INSTALL.contains("input[aria-label=\"Ask Meta AI\"]"))
+        assertTrue(ReaderScript.INSTALL.contains("button[aria-label=\"Send\"]"))
+        assertTrue(ReaderScript.INSTALL.contains("date of birth"))
+        assertTrue(ReaderScript.INSTALL.contains("pointerdown"))
+    }
 }

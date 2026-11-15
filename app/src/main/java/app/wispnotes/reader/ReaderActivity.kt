@@ -152,11 +152,10 @@ private fun ReaderScreen(noteFile: String, onClose: () -> Unit) {
         view.eval(ReaderScript.start(url))
     }
 
-    // Watch until the answer lands, the page gives up, or the cap runs out.
+    // Watch until the answer lands, the page gives up, or the cap runs out. The cap does not run
+    // while the user is answering meta.ai (the birth-year gate), or a slow setup would look like a timeout.
     LaunchedEffect(view, reel, run) {
         if (reel.isNullOrBlank()) return@LaunchedEffect
-        state = ReaderState.idle
-        saveError = null
         val deadline = System.currentTimeMillis() + CAP_MS
         while (true) {
             delay(POLL_MS)
@@ -167,7 +166,11 @@ private fun ReaderScreen(noteFile: String, onClose: () -> Unit) {
                 continue
             }
             state = now
-            Log.d(TAG, "run=$run stage=${now.stage} error=${now.error} composer=${now.composer} chars=${now.answer.length} links=${now.links.size}")
+            Log.d(TAG, "run=$run stage=${now.stage} error=${now.error} gate=${now.gate} answers=${now.answers} chars=${now.answer.length} links=${now.links.size}")
+            // The page can carry on by itself once the gate is answered: take that answer.
+            if (now.waitingForUser && now.answers > 0) {
+                reel?.takeIf { it.isNotBlank() }?.let { view.evaluateJavascript(ReaderScript.resume(it), null) }
+            }
             if (now.done) {
                 saving = true
                 val ok = save(ctx, noteFile, now)
@@ -182,7 +185,7 @@ private fun ReaderScreen(noteFile: String, onClose: () -> Unit) {
                 break
             }
             if (now.failed) break
-            if (System.currentTimeMillis() > deadline) {
+            if (!now.waitingForUser && System.currentTimeMillis() > deadline) {
                 state = now.copy(stage = "failed", error = "timeout")
                 break
             }
@@ -196,6 +199,14 @@ private fun ReaderScreen(noteFile: String, onClose: () -> Unit) {
             saving = saving,
             saveError = saveError,
             modifier = Modifier.align(Alignment.BottomCenter),
+            onContinue = {
+                saveError = null
+                reel?.takeIf { it.isNotBlank() }?.let { url ->
+                    view.evaluateJavascript(ReaderScript.resume(url), null)
+                    Log.d(TAG, "stage=continue url=$url")
+                }
+                run++ // a fresh cap for the work that follows
+            },
             onRetry = {
                 state = ReaderState.idle
                 saveError = null
@@ -214,6 +225,7 @@ private fun ReaderBar(
     saving: Boolean,
     saveError: String?,
     modifier: Modifier = Modifier,
+    onContinue: () -> Unit,
     onRetry: () -> Unit,
     onClose: () -> Unit,
 ) {
@@ -233,11 +245,17 @@ private fun ReaderBar(
             Text("Sign in on the page above, then continue.", color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (state.failed || saveError != null) {
-                WispButton("Try again", onRetry, Modifier.weight(1f), compact = true)
-                WispButton("Close", onClose, Modifier.weight(1f), color = WispColors.Ink, textColor = Color.White, compact = true)
-            } else {
-                WispButton(
+            when {
+                state.failed || saveError != null -> {
+                    WispButton("Try again", onRetry, Modifier.weight(1f), compact = true)
+                    WispButton("Close", onClose, Modifier.weight(1f), color = WispColors.Ink, textColor = Color.White, compact = true)
+                }
+                // The page is the app's job, not the app's guess: the user answers it by hand.
+                state.waitingForUser -> {
+                    WispButton("Continue", onContinue, Modifier.weight(1f), compact = true)
+                    WispButton("Close", onClose, Modifier.weight(1f), color = WispColors.Ink, textColor = Color.White, compact = true)
+                }
+                else -> WispButton(
                     label = if (saving) "Saving…" else "Cancel",
                     onClick = onClose,
                     modifier = Modifier.fillMaxWidth(),
