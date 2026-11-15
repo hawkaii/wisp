@@ -24,6 +24,12 @@ interface VaultRepository {
     /** Writes [content] as a new file in `Inbox/`. Never overwrites: a taken name gets `-2`, `-3`... Returns the final file name. */
     suspend fun writeInboxNote(fileName: String, content: String): Result<String>
 
+    /**
+     * Writes [bytes] to `Inbox/[fileName]`, replacing any file of that name.
+     * Used for pictures the note points at, because a remote link can expire. Returns the name written.
+     */
+    suspend fun writeInboxFile(fileName: String, mime: String, bytes: ByteArray): Result<String>
+
     /** Every `.md` file in `Inbox/` with its text. Empty when there is no vault. */
     suspend fun listInboxNotes(): List<RawNote>
 

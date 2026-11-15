@@ -53,9 +53,28 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         // Nothing found: try again (offline, slow server) before recording "failed".
         if (found.status == "failed" && nextAttempt < MAX_ATTEMPTS) return Result.retry()
 
+        found = withContext(Dispatchers.IO) { keepPicture(repo, name, url, found) }
         val updated = repo.editInboxNote(name) { Merge.apply(it, found) }.getOrElse { return Result.failure() }
         NoteEntry.parse(name, updated)?.let { WispDb.get(applicationContext).notes().put(it) }
         return Result.success()
+    }
+
+    /**
+     * Instagram's `og:image` is a signed CDN link with an `oe=` expiry about four days out
+     * (measured 15 Nov 2026: `oe=6AFEE63B` -> 19 Nov). Stored as a URL, the card goes blank a week
+     * later and never comes back. So the bytes are fetched once, while the link still works, and
+     * written next to the note. Any failure falls back to the URL unchanged.
+     */
+    private suspend fun keepPicture(repo: SafVaultRepository, noteFile: String, url: String, found: Extracted): Extracted {
+        val remote = found.thumbnail ?: return found
+        if (!remote.startsWith("http")) return found
+        if (Source.detect(url).source != "instagram") return found // the case with a signed link; other sources keep stable URLs
+        val bytes = OkHttpFetcher.getBytes(remote) ?: return found
+        val ext = Images.extension(bytes) ?: return found
+        val saved = repo.writeInboxFile(Images.fileName(noteFile, ext), Images.mime(ext), bytes)
+            .getOrNull() ?: return found
+        Log.d(TAG, "stage=picture_kept file=$saved bytes=${bytes.size}")
+        return found.copy(thumbnail = saved)
     }
 
     companion object {

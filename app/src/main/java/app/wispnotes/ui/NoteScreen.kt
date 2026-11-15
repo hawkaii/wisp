@@ -167,8 +167,9 @@ private fun Header(e: NoteEntry, author: String?, shared: Shared?) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 val thumb = Modifier.size(76.dp).clip(RoundedCornerShape(14.dp)).border(2.dp, WispColors.Void, RoundedCornerShape(14.dp))
-                if (e.thumbnail != null) {
-                    AsyncImage(model = e.thumbnail, contentDescription = "Thumbnail", contentScale = ContentScale.Crop, modifier = thumb)
+                val image = Thumbs.model(e)
+                if (image != null) {
+                    AsyncImage(model = image, contentDescription = "Thumbnail", contentScale = ContentScale.Crop, modifier = thumb)
                 } else {
                     Box(thumb.background(WispColors.Purple), contentAlignment = Alignment.Center) { Ghost(44.dp, float = false) }
                 }
