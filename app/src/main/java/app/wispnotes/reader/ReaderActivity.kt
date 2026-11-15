@@ -5,6 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.MotionEvent
 import android.util.Log
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -20,6 +23,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -166,6 +171,12 @@ private fun ReaderScreen(noteFile: String, onClose: () -> Unit) {
                 continue
             }
             state = now
+            // The page wants a real gesture on Send; only a touch from the view counts.
+            now.tap?.let { point ->
+                realTap(view, point)
+                view.evaluateJavascript("(function(){ return window.__wisp ? window.__wisp.tapped() : null; })()", null)
+                Log.d(TAG, "stage=tapped x=${point.x} y=${point.y} dpr=${point.dpr}")
+            }
             Log.d(TAG, "run=$run stage=${now.stage} error=${now.error} gate=${now.gate} answers=${now.answers} chars=${now.answer.length} links=${now.links.size}")
             // The page can carry on by itself once the gate is answered: take that answer.
             if (now.waitingForUser && now.answers > 0) {
@@ -192,13 +203,14 @@ private fun ReaderScreen(noteFile: String, onClose: () -> Unit) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(WispColors.Void)) {
-        AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
+    // The page and the bar each get their own space: on mobile meta.ai the composer sits at the bottom,
+    // so a bar drawn on top of the page would hide it.
+    Column(Modifier.fillMaxSize().background(WispColors.Void).statusBarsPadding().navigationBarsPadding()) {
+        AndroidView(factory = { view }, modifier = Modifier.weight(1f).fillMaxWidth())
         ReaderBar(
             state = state,
             saving = saving,
             saveError = saveError,
-            modifier = Modifier.align(Alignment.BottomCenter),
             onContinue = {
                 saveError = null
                 reel?.takeIf { it.isNotBlank() }?.let { url ->
@@ -278,6 +290,21 @@ private suspend fun save(context: Context, noteFile: String, state: ReaderState)
     }.getOrNull() ?: return false
     NoteEntry.parse(noteFile, updated)?.let { WispDb.get(context).notes().put(it) }
     return true
+}
+
+/** A tap the page treats as a real gesture: dispatched through the view, CSS px scaled by [TapPoint.dpr]. */
+private fun realTap(view: WebView, point: TapPoint) {
+    val x = point.x * point.dpr
+    val y = point.y * point.dpr
+    val down = SystemClock.uptimeMillis()
+    val press = MotionEvent.obtain(down, down, MotionEvent.ACTION_DOWN, x, y, 0)
+    val release = MotionEvent.obtain(down, down + 60, MotionEvent.ACTION_UP, x, y, 0)
+    press.source = InputDevice.SOURCE_TOUCHSCREEN
+    release.source = InputDevice.SOURCE_TOUCHSCREEN
+    view.dispatchTouchEvent(press)
+    view.dispatchTouchEvent(release)
+    press.recycle()
+    release.recycle()
 }
 
 /** `evaluateJavascript` must run on the main thread and answers through a callback. */

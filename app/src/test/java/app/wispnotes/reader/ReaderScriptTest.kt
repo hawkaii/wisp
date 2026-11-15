@@ -117,4 +117,15 @@ class ReaderScriptTest {
         assertTrue(ReaderScript.INSTALL.contains("date of birth"))
         assertTrue(ReaderScript.INSTALL.contains("pointerdown"))
     }
+
+    /** The mobile Send ignores scripted clicks, so the page hands Kotlin a point for a real touch. */
+    @Test fun aTapRequestCarriesThePointAndTheScale() {
+        val s = ReaderState.parse("""{"stage":"sending","tap":{"x":358,"y":598.5,"dpr":2.625},"links":[]}""")
+        requireNotNull(s)
+        val tap = requireNotNull(s.tap)
+        assertEquals(358f, tap.x, 0.01f)
+        assertEquals(598.5f, tap.y, 0.01f)
+        assertEquals(2.625f, tap.dpr, 0.001f)
+        assertNull(ReaderState.parse("""{"stage":"reading","tap":null}""")?.tap)
+    }
 }

@@ -47,7 +47,7 @@ object ReaderScript {
             stop: '[data-testid="composer-stop-button"]',
             answer: '[data-testid="assistant-message"]'
           };
-          var run = { stage: 'idle', error: null, answer: '', links: [], chatUrl: null, gate: false };
+          var run = { stage: 'idle', error: null, answer: '', links: [], chatUrl: null, gate: false, tap: null };
           var busy = false;
 
           function txt(el) { return (el && (el.innerText || el.textContent) || '').trim(); }
@@ -152,21 +152,11 @@ object ReaderScript {
             return false;
           }
 
-          /* The mobile Send button ignores a bare click; it takes the whole pointer sequence. */
-          function press(el) {
+          /* The mobile Send button ignores a semantic click: the page wants a real gesture
+             (navigator.userActivation). Kotlin dispatches a real touch at this rectangle instead. */
+          function rectOf(el) {
             var r = el.getBoundingClientRect();
-            var o = {
-              bubbles: true, cancelable: true, view: window, button: 0, pointerId: 1,
-              isPrimary: true, pointerType: 'touch',
-              clientX: r.x + r.width / 2, clientY: r.y + r.height / 2
-            };
-            var names = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
-            for (var i = 0; i < names.length; i++) {
-              var name = names[i];
-              var Ctor = /^pointer/.test(name) ? (window.PointerEvent || window.MouseEvent) : window.MouseEvent;
-              if (!Ctor) continue;
-              try { el.dispatchEvent(new Ctor(name, o)); } catch (e) { /* older WebView */ }
-            }
+            return { x: r.x + r.width / 2, y: r.y + r.height / 2, dpr: window.devicePixelRatio || 1 };
           }
 
           async function harvest(el) {
@@ -206,6 +196,7 @@ object ReaderScript {
             run.chatUrl = null;
             run.error = null;
             run.gate = false;
+            run.tap = null;
             function fail(error) {
               run.stage = 'failed';
               run.error = error;
@@ -227,7 +218,11 @@ object ReaderScript {
             if (!(await fill(box, url + '\n' + prompt))) return gateOpen() ? waitForUser() : fail('composer_rejected');
             var send = await waitFor(sendButton, 8000);
             if (!send) return fail('composer_rejected');
-            press(send);
+            /* Hand the rectangle to Kotlin: only a real touch from the view counts as a gesture,
+               and the page ignores anything less for this button. */
+            run.stage = 'sending';
+            run.tap = rectOf(send);
+            await waitFor(function () { return !run.tap; }, 10000);
             run.stage = 'sent';
             await sleep(1200);
             if (gateOpen()) return waitForUser();
@@ -260,6 +255,7 @@ object ReaderScript {
           window.__wisp = {
             start: function (url, prompt) { go(url, prompt); return true; },
             resume: function (url, prompt) { resume(url, prompt); return true; },
+            tapped: function () { run.tap = null; return true; },
             state: function () {
               var box = composer();
               return {
@@ -272,6 +268,7 @@ object ReaderScript {
                 gate: run.gate || (!box && gateOpen()),
                 login: !box && !run.gate && loginWall(),
                 answers: answers().length,
+                tap: run.tap,
                 page: location.href
               };
             }
@@ -309,6 +306,9 @@ object ReaderScript {
     }
 }
 
+/** Where the WebView must be tapped, in CSS pixels, scaled by [dpr]. */
+data class TapPoint(val x: Float, val y: Float, val dpr: Float)
+
 /** What the page says about itself. Built by [ReaderScript.state] and parsed by [parse]. */
 data class ReaderState(
     val stage: String,
@@ -324,6 +324,8 @@ data class ReaderState(
     val login: Boolean,
     /** How many answers are on the page. A gate can be followed by an answer without our help. */
     val answers: Int,
+    /** Set while the page waits for a real tap on its Send button. */
+    val tap: TapPoint?,
     val page: String,
 ) {
     val done: Boolean get() = stage == "done" && answer.isNotBlank()
@@ -339,6 +341,7 @@ data class ReaderState(
         stage == "idle" -> "Opening Meta AI…"
         stage == "composer" -> "Waiting for the box on meta.ai…"
         stage == "typing" -> "Typing the reel in…"
+        stage == "sending" -> "Sending to Meta AI…"
         stage == "sent" -> "Sent. Waiting for the answer…"
         stage == "reading" -> "Reading the reel. About 30 seconds."
         stage == "done" -> "Got it. Saving to the note…"
@@ -346,7 +349,7 @@ data class ReaderState(
     }
 
     companion object {
-        val idle = ReaderState("idle", null, "", emptyList(), null, false, false, false, 0, "")
+        val idle = ReaderState("idle", null, "", emptyList(), null, false, false, false, 0, null, "")
 
         fun errorLabel(error: String?): String = when (error) {
             "needs_login" -> "Meta AI wants a sign-in. Sign in below, then try again."
@@ -371,6 +374,9 @@ data class ReaderState(
                     val url = link.optString("url")
                     if (url.isNotBlank()) links.add(AiLink(link.optString("text"), url))
                 }
+                val tap = o.optJSONObject("tap")?.let {
+                    TapPoint(it.optDouble("x", 0.0).toFloat(), it.optDouble("y", 0.0).toFloat(), it.optDouble("dpr", 1.0).toFloat())
+                }
                 ReaderState(
                     stage = o.optString("stage", "idle"),
                     error = o.optString("error").takeIf { it.isNotBlank() && it != "null" },
@@ -381,6 +387,7 @@ data class ReaderState(
                     gate = o.optBoolean("gate"),
                     login = o.optBoolean("login"),
                     answers = o.optInt("answers"),
+                    tap = tap,
                     page = o.optString("page"),
                 )
             }.getOrNull()
