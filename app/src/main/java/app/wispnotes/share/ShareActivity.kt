@@ -48,6 +48,7 @@ import app.wispnotes.extract.OkHttpFetcher
 import app.wispnotes.note.Note
 import app.wispnotes.note.NoteDraft
 import app.wispnotes.note.Source
+import app.wispnotes.reader.ReaderActivity
 import app.wispnotes.ui.Ghost
 import app.wispnotes.ui.WispButton
 import app.wispnotes.ui.WispChip
@@ -218,7 +219,13 @@ private fun SaveSheet(url: String, initialTitle: String, repo: VaultRepository, 
                             .onSuccess { name ->
                                 if (url.isNotBlank()) ExtractWorker.enqueue(ctx, name)
                                 title = savedTitle
-                                caught = true
+                                if (info.source == "instagram" && info.type == "reel") {
+                                    // A reel has no readable text in its page: Meta AI is the only reader.
+                                    ctx.startActivity(ReaderActivity.intent(ctx, name))
+                                    close()
+                                } else {
+                                    caught = true
+                                }
                             }
                             .onFailure { status = "Could not save: ${it.message}" }
                         saving = false

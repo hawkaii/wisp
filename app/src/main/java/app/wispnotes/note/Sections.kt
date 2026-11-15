@@ -1,5 +1,8 @@
 package app.wispnotes.note
 
+/** A link meta.ai gave back, already decoded out of its `l.meta.ai` redirect. */
+data class AiLink(val text: String, val url: String)
+
 /**
  * The body sections. `## Text` is the app's (written once, only while empty). `## My notes` belongs to the
  * user: the app replaces its content only when the user edits it, and touches nothing outside it.
@@ -8,12 +11,60 @@ object Sections {
     private const val HEADING = "## Text"
     private const val TRANSCRIPT = "## Transcript"
     private const val MINE = "## My notes"
+    private const val AI = "## AI"
 
     // The user's section ends at the next heading the app itself writes. Any other `## ` line is the
     // user's own heading and stays inside their notes, so an edit can never duplicate or cut their text.
-    private val APP_HEADINGS = setOf(HEADING, TRANSCRIPT)
+    private val APP_HEADINGS = setOf(HEADING, TRANSCRIPT, AI)
 
     fun textBlock(text: String) = "$HEADING\n\n${text.trim()}\n"
+
+    /**
+     * Writes only the app-owned `## AI` section, replacing it if it is already there: reading the same
+     * note twice must not stack two answers. [links] are the addresses meta.ai hid behind `l.meta.ai`
+     * redirects, so they are written out as Markdown; the answer text alone loses them.
+     */
+    fun withAi(content: String, answer: String, links: List<AiLink>, chatUrl: String?): String {
+        val text = answer.trim()
+        if (text.isEmpty()) return content
+        val block = buildString {
+            appendLine(AI)
+            appendLine()
+            appendLine(text)
+            if (links.isNotEmpty()) {
+                appendLine()
+                appendLine("### Links")
+                appendLine()
+                links.forEach { link ->
+                    val label = link.text.ifBlank { link.url }.replace("[", "\\[").replace("]", "\\]")
+                    appendLine("- [$label](${link.url})")
+                }
+            }
+            if (!chatUrl.isNullOrBlank()) {
+                appendLine()
+                appendLine("_[Chat with Meta AI]($chatUrl)_")
+            }
+        }.trimEnd('\n')
+        return replaceSection(content, AI, block)
+    }
+
+    /** The `## AI` section's text, or null when the note has none yet. */
+    fun ai(content: String): String? {
+        val lines = content.split("\n")
+        val at = lines.indexOfFirst { it.trimEnd() == AI }
+        if (at < 0) return null
+        val next = (at + 1 until lines.size).firstOrNull { lines[it].startsWith("## ") } ?: lines.size
+        return lines.subList(at + 1, next).joinToString("\n").trim().ifEmpty { null }
+    }
+
+    /** Replaces the section starting at [heading] in place, or appends it. Touches nothing else. */
+    private fun replaceSection(content: String, heading: String, block: String): String {
+        val raw = content.split("\n")
+        val at = raw.indexOfFirst { it.trimEnd() == heading }
+        if (at < 0) return content.trimEnd('\n') + "\n\n" + block + "\n"
+        val next = (at + 1 until raw.size).firstOrNull { raw[it].startsWith("## ") } ?: raw.size
+        return (raw.subList(0, at) + block.split("\n") + raw.subList(next, raw.size)).joinToString("\n")
+    }
 
     /** Writes only the app-owned transcript section. */
     fun withTranscript(content: String, lines: List<TranscriptLine>, url: String): String {
@@ -27,11 +78,7 @@ object Sections {
                 }
             }
         }.trimEnd('\n')
-        val raw = content.split("\n")
-        val at = raw.indexOfFirst { it.trimEnd() == TRANSCRIPT }
-        if (at < 0) return content.trimEnd('\n') + "\n\n" + block + "\n"
-        val next = (at + 1 until raw.size).firstOrNull { raw[it].startsWith("## ") } ?: raw.size
-        return (raw.subList(0, at) + block.split("\n") + raw.subList(next, raw.size)).joinToString("\n")
+        return replaceSection(content, TRANSCRIPT, block)
     }
 
     fun transcript(content: String): List<TranscriptLine> =

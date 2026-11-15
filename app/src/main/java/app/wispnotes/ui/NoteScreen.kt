@@ -1,6 +1,8 @@
 package app.wispnotes.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -43,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -62,6 +65,7 @@ import app.wispnotes.note.Source
 import app.wispnotes.note.TranscriptLine
 import app.wispnotes.note.formatTranscriptTimestamp
 import app.wispnotes.note.parseMarkdown
+import app.wispnotes.reader.ReaderActivity
 import app.wispnotes.ui.theme.LocalReduceMotion
 import app.wispnotes.ui.theme.WispCard
 import app.wispnotes.ui.theme.WispColors
@@ -76,6 +80,9 @@ fun NoteScreen(fileName: String, shared: Shared?, onBack: () -> Unit, vm: NoteVi
     val notes by vm.notes.collectAsStateWithLifecycle()
     val missing by vm.missing.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    // The reader writes the note itself; reloading on return is what shows the answer.
+    val reader = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { vm.open(fileName) }
     var finishing by rememberSaveable(fileName) { mutableStateOf(false) }
     var rating by rememberSaveable(fileName) { mutableIntStateOf(0) }
     var publish by rememberSaveable(fileName) { mutableStateOf(false) }
@@ -106,11 +113,14 @@ fun NoteScreen(fileName: String, shared: Shared?, onBack: () -> Unit, vm: NoteVi
                             canFinish = Review.hasEnoughNotes(notes),
                             finishing = finishing,
                             retryTranscript = e.source == "youtube" && (note.transcriptStatus == "none" || e.extractAttempts >= ExtractWorker.MAX_ATTEMPTS),
+                            canRead = e.source == "instagram" && e.url.isNotBlank(),
+                            hasAi = note.ai != null,
                             onStart = vm::start,
                             onOpen = { uriHandler.openUri(e.url) },
                             onFinish = { finishing = true },
                             onPublish = { publish = !publish },
                             onRetryTranscript = vm::retryTranscript,
+                            onRead = { reader.launch(ReaderActivity.intent(context, fileName)) },
                         )
                     }
                     item {
@@ -192,15 +202,21 @@ private fun Actions(
     canFinish: Boolean,
     finishing: Boolean,
     retryTranscript: Boolean,
+    canRead: Boolean,
+    hasAi: Boolean,
     onStart: () -> Unit,
     onOpen: () -> Unit,
     onFinish: () -> Unit,
     onPublish: () -> Unit,
     onRetryTranscript: () -> Unit,
+    onRead: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (retryTranscript) {
             WispButton("Retry transcript", onRetryTranscript)
+        }
+        if (canRead) {
+            WispButton(if (hasAi) "Read again with Meta AI" else "Read with Meta AI", onRead, color = WispColors.Purple, textColor = Color.White)
         }
         when (e.status) {
             "in-progress" -> {

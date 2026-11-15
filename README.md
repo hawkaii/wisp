@@ -22,6 +22,7 @@ _Screenshots go here (Home, Note, Review, Notes, Settings)._
 ## M2
 
 - Extraction (no AI): after Save, a WorkManager job reads the page and fills the note: title, author, thumbnail, length, text. `extracted` goes `pending` -> `done`, `partial` or `failed`. Sources: YouTube, web articles, IMDb, Letterboxd, X, Reddit, Instagram (link-preview crawler tags; paste the caption if it fails).
+- Reader: share an Instagram reel and the phone reads it with Meta AI in a visible WebView, then writes the answer to `## AI` in the note (summary, links, transcript). No account and no API key: the page runs as a guest, or in whatever session you sign in to. Notes -> open a reel -> "Read with Meta AI" runs it again.
 - Home is the queue: cards, source filter, search, swipe to archive, and "What now?" (10, 25 or 60 minutes -> 3 picks). It reads a Room index that is rebuilt from the vault files on every visit.
 
 ## M1
