@@ -47,7 +47,7 @@ private const val SYNC_DOCS = "https://obsidian.md/help/sync-notes"
 fun SettingsScreen(
     vaultPath: String,
     summariseReels: Boolean,
-    metaLoggedIn: Boolean,
+    metaLoggedIn: Boolean?,
     onChangeVault: (Uri) -> Unit,
     onSummarise: (Boolean) -> Unit,
     onLogin: () -> Unit,
@@ -97,7 +97,11 @@ fun SettingsScreen(
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text("Summarise reels", style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                if (metaLoggedIn) "Signed in on this phone." else "Not signed in on this phone.",
+                                when (metaLoggedIn) {
+                                    true -> "Signed in on this phone."
+                                    false -> "Not signed in on this phone."
+                                    null -> "Not checked on this phone yet."
+                                },
                                 color = WispColors.Lavender,
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -118,11 +122,11 @@ fun SettingsScreen(
                         color = WispColors.Lavender,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    if (summariseReels && !metaLoggedIn) {
+                    if (summariseReels && metaLoggedIn == false) {
                         Text("Meta AI needs one sign-in on this phone before it will read a reel.", color = WispColors.Haze)
                     }
                     WispButton(
-                        if (metaLoggedIn) "Log in again" else "Log in to Meta AI",
+                        if (metaLoggedIn == true) "Log in again" else "Log in to Meta AI",
                         onLogin,
                         color = WispColors.Purple,
                         textColor = Color.White,

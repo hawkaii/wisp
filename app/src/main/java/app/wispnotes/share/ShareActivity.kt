@@ -244,7 +244,7 @@ private fun SaveSheet(url: String, initialTitle: String, repo: VaultRepository, 
                                     // Off by default: the note is saved and nothing leaves the phone.
                                     val action = ReelPolicy.action(
                                         MetaSettings.summarise(ctx).first(),
-                                        MetaSettings.loggedIn(ctx).first(),
+                                        MetaSettings.loginState(ctx).first(),
                                     )
                                     when (action) {
                                         ReelAction.ReadNow -> {

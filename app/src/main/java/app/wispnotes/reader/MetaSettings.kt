@@ -1,36 +1,44 @@
 package app.wispnotes.reader
 
 import android.content.Context
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 // Its own store file: two DataStore delegates on "wisp" would crash at start.
 private val Context.metaStore by preferencesDataStore("meta")
-private val KEY_SUMMARISE = booleanPreferencesKey("summarise_reels")
-private val KEY_LOGGED_IN = booleanPreferencesKey("meta_logged_in")
+private val KEY_SUMMARISE = stringPreferencesKey("summarise_reels")
+private val KEY_LOGIN = stringPreferencesKey("meta_login")
 
 /**
- * The two facts the reader needs before it is worth opening: does the user want reels summarised,
- * and is this phone signed in to meta.ai.
+ * The two facts the reader needs before it is worth opening: does the user want reels summarised, and
+ * what did the last live check of meta.ai say about the session.
  *
- * [LOGGED_IN] is only a memory of the last live check of meta.ai's own login button. It is a hint for
- * the save sheet, never the authority: the reader checks the page itself every time.
+ * The login state is deliberately three-valued. **Unknown** is not "signed out": on a fresh install
+ * there is no answer yet, and guessing "signed out" would tell a signed-in user to log in again. It is
+ * only ever a hint for the save sheet; the reader checks the page itself every time.
  */
 object MetaSettings {
     /** Off by default: a shared reel is saved, and nothing is sent anywhere. */
-    fun summarise(context: Context): Flow<Boolean> = context.metaStore.data.map { it[KEY_SUMMARISE] ?: false }
+    fun summarise(context: Context): Flow<Boolean> = context.metaStore.data.map { it[KEY_SUMMARISE] == "on" }
 
     suspend fun setSummarise(context: Context, on: Boolean) {
-        context.metaStore.edit { it[KEY_SUMMARISE] = on }
+        context.metaStore.edit { it[KEY_SUMMARISE] = if (on) "on" else "off" }
     }
 
-    fun loggedIn(context: Context): Flow<Boolean> = context.metaStore.data.map { it[KEY_LOGGED_IN] ?: false }
+    /** True signed in, false signed out, null when this phone has never been checked. */
+    fun loginState(context: Context): Flow<Boolean?> = context.metaStore.data.map {
+        when (it[KEY_LOGIN]) {
+            "in" -> true
+            "out" -> false
+            else -> null
+        }
+    }
 
-    suspend fun setLoggedIn(context: Context, on: Boolean) {
-        context.metaStore.edit { it[KEY_LOGGED_IN] = on }
+    suspend fun setLoggedIn(context: Context, signedIn: Boolean) {
+        context.metaStore.edit { it[KEY_LOGIN] = if (signedIn) "in" else "out" }
     }
 }
 
@@ -47,13 +55,14 @@ enum class ReelAction {
 }
 
 /**
- * The whole rule, as one pure function: the toggle decides whether anything runs, the login state only
- * decides whether it is worth opening the reader.
+ * The whole rule, as one pure function. The toggle decides whether anything runs; the login hint only
+ * decides whether it is worth opening the reader. `loggedIn == null` means "not checked yet", which
+ * opens the reader and lets the live check settle it.
  */
 object ReelPolicy {
-    fun action(summarise: Boolean, loggedIn: Boolean): ReelAction = when {
+    fun action(summarise: Boolean, loggedIn: Boolean?): ReelAction = when {
         !summarise -> ReelAction.SaveOnly
-        loggedIn -> ReelAction.ReadNow
-        else -> ReelAction.SaveAndWarnLogin
+        loggedIn == false -> ReelAction.SaveAndWarnLogin
+        else -> ReelAction.ReadNow
     }
 }

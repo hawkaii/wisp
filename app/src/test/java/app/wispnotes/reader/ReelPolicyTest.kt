@@ -8,6 +8,7 @@ class ReelPolicyTest {
     @Test fun offByDefaultOnlySaves() {
         assertEquals(ReelAction.SaveOnly, ReelPolicy.action(summarise = false, loggedIn = true))
         assertEquals(ReelAction.SaveOnly, ReelPolicy.action(summarise = false, loggedIn = false))
+        assertEquals(ReelAction.SaveOnly, ReelPolicy.action(summarise = false, loggedIn = null))
     }
 
     @Test fun onAndSignedInReadsTheReel() {
@@ -16,5 +17,10 @@ class ReelPolicyTest {
 
     @Test fun onButSignedOutSaysSoInsteadOfOpeningAReaderThatWouldHitAWall() {
         assertEquals(ReelAction.SaveAndWarnLogin, ReelPolicy.action(summarise = true, loggedIn = false))
+    }
+
+    /** A fresh install has no answer yet. That is not "signed out", so it must not nag. */
+    @Test fun unknownLoginOpensTheReaderAndLetsThePageDecide() {
+        assertEquals(ReelAction.ReadNow, ReelPolicy.action(summarise = true, loggedIn = null))
     }
 }

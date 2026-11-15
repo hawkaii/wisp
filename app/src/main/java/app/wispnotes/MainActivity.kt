@@ -28,8 +28,8 @@ data class AppState(
     val vaultPath: String = "",
     /** Settings > Meta AI: summarise a shared reel. Off by default. */
     val summariseReels: Boolean = false,
-    /** The last live check of meta.ai's login button. A hint, not the authority. */
-    val metaLoggedIn: Boolean = false,
+    /** The last live check of meta.ai's login button. Null means never checked. A hint, not the authority. */
+    val metaLoggedIn: Boolean? = null,
 )
 
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -48,7 +48,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             vaultLost = uri != null && !ok,
             vaultPath = uri?.lastPathSegment.orEmpty().substringAfter(':'),
             summariseReels = MetaSettings.summarise(getApplication()).first(),
-            metaLoggedIn = MetaSettings.loggedIn(getApplication()).first(),
+            metaLoggedIn = MetaSettings.loginState(getApplication()).first(),
         )
     }
 

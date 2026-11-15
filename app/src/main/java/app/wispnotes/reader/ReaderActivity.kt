@@ -164,6 +164,7 @@ private fun ReaderScreen(noteFile: String, onClose: () -> Unit) {
     LaunchedEffect(view, reel, run) {
         if (reel.isNullOrBlank()) return@LaunchedEffect
         val deadline = System.currentTimeMillis() + CAP_MS
+        var loginHint: Boolean? = null
         while (true) {
             delay(POLL_MS)
             val now = ReaderState.parse(view.eval(ReaderScript.state()))
@@ -180,6 +181,15 @@ private fun ReaderScreen(noteFile: String, onClose: () -> Unit) {
                 Log.d(TAG, "stage=tapped x=${point.x} y=${point.y} dpr=${point.dpr}")
             }
             Log.d(TAG, "run=$run stage=${now.stage} error=${now.error} gate=${now.gate} answers=${now.answers} chars=${now.answer.length} links=${now.links.size}")
+            // The reader sees the page, so it keeps the Settings hint honest. Only once the page has
+            // made up its mind: a composer means signed in, meta.ai's login button means signed out.
+            if (now.composer || now.login) {
+                val signedIn = !now.login
+                if (loginHint != signedIn) {
+                    loginHint = signedIn
+                    runCatching { MetaSettings.setLoggedIn(ctx, signedIn) }
+                }
+            }
             // The page can carry on by itself once the gate is answered: take that answer.
             if (now.waitingForUser && now.answers > 0) {
                 reel?.takeIf { it.isNotBlank() }?.let { view.evaluateJavascript(ReaderScript.resume(it), null) }
