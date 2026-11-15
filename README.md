@@ -23,6 +23,7 @@ _Screenshots go here (Home, Note, Review, Notes, Settings)._
 
 - Extraction (no AI): after Save, a WorkManager job reads the page and fills the note: title, author, thumbnail, length, text. `extracted` goes `pending` -> `done`, `partial` or `failed`. Sources: YouTube, web articles, IMDb, Letterboxd, X, Reddit, Instagram (link-preview crawler tags; paste the caption if it fails).
 - Reader (opt-in): Settings -> Meta AI -> "Summarise reels". A shared reel is then read in a visible WebView and the answer is written to `## AI` in the note (summary, links, transcript). Off by default, so a share only saves. Meta AI needs one sign-in on the phone (Settings -> "Log in to Meta AI") and the session stays inside Wisp. Notes -> open a reel -> "Read with Meta AI" runs it on demand.
+- The picture is a file, not a link. Instagram's CDN link expires in about four days (measured 15 Nov 2026: `oe=6AFEE63B` -> 19 Nov), so the bytes are downloaded once and written to `Inbox/` under the note's name. If the download fails, the note keeps the URL and still shows a picture.
 - Home is the queue: cards, source filter, search, swipe to archive, and "What now?" (10, 25 or 60 minutes -> 3 picks). It reads a Room index that is rebuilt from the vault files on every visit.
 
 ## M1

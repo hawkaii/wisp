@@ -96,7 +96,7 @@ private fun MainScaffold(vm: MainViewModel, state: AppState) {
                     vaultPath = state.vaultPath,
                     summariseReels = state.summariseReels,
                     metaLoggedIn = state.metaLoggedIn,
-                    onChangeVault = { vm.pickVault(it); route = "" },
+                    onChangeVault = { vm.pickVault(it); Thumbs.clear(); route = "" },
                     onSummarise = vm::setSummariseReels,
                     onLogin = { ctx.startActivity(ReaderActivity.loginIntent(ctx)) },
                     onBack = { route = "" },

@@ -81,6 +81,19 @@ class SafVaultRepository(context: Context) : VaultRepository {
             }
         }
 
+    override suspend fun writeInboxFile(fileName: String, mime: String, bytes: ByteArray): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val inbox = inboxDir() ?: error("No vault chosen")
+                // Replace, so a second extraction of the same note does not leave "-2", "-3" copies behind.
+                inbox.findFile(fileName)?.delete()
+                val file = inbox.createFile(mime, fileName) ?: error("Cannot create $fileName")
+                ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(bytes) }
+                    ?: error("Cannot write $fileName")
+                file.name ?: fileName
+            }
+        }
+
     // shortcut: reads every file in full over SAF on each scan; fine for hundreds of notes, read only the head if a vault gets huge.
     override suspend fun listInboxNotes(): List<RawNote> = withContext(Dispatchers.IO) {
         val inbox = inboxDir() ?: return@withContext emptyList()

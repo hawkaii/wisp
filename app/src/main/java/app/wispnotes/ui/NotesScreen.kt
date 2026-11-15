@@ -89,8 +89,9 @@ private fun NoteRow(e: NoteEntry, onOpen: () -> Unit, modifier: Modifier) {
     WispCard(modifier.fillMaxWidth().pressable(onClick = onOpen), color = WispColors.Ink) {
         Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             val thumb = Modifier.size(56.dp).clip(RoundedCornerShape(12.dp))
-            if (e.thumbnail != null) {
-                AsyncImage(e.thumbnail, "Thumbnail", contentScale = ContentScale.Crop, modifier = thumb)
+            val image = Thumbs.model(e)
+            if (image != null) {
+                AsyncImage(image, "Thumbnail", contentScale = ContentScale.Crop, modifier = thumb)
             } else {
                 Box(thumb.background(WispColors.Purple), contentAlignment = Alignment.Center) { Ghost(34.dp, float = false) }
             }
