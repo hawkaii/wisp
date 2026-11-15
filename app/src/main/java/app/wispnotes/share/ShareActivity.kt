@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.wispnotes.MainActivity
 import app.wispnotes.R
 import app.wispnotes.extract.ExtractWorker
 import app.wispnotes.extract.Extracted
@@ -63,6 +64,7 @@ import app.wispnotes.ui.WispChip
 import app.wispnotes.ui.theme.WispColors
 import app.wispnotes.ui.theme.WispTheme
 import app.wispnotes.vault.SafVaultRepository
+import app.wispnotes.vault.SavedLink
 import app.wispnotes.vault.VaultRepository
 import coil.compose.AsyncImage
 import java.net.URI
@@ -120,6 +122,8 @@ private fun SaveSheet(
     var saving by remember { mutableStateOf(false) }
     var caught by remember { mutableStateOf(false) }
     var needLogin by remember { mutableStateOf(false) }
+    /** Set when this link is already in the vault, so the sheet asks before writing a second one. */
+    var duplicate by remember { mutableStateOf<SavedLink?>(null) }
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val info = remember(url) { Source.detect(url) }
@@ -153,6 +157,62 @@ private fun SaveSheet(
         }
     }
 
+    // One save path for "Save" and "Save a copy"; only the copy path skips the duplicate check.
+    suspend fun save(allowCopy: Boolean) {
+        saving = true
+        status = null
+        duplicate = null
+        if (!allowCopy && url.isNotBlank()) {
+            // A failed lookup must never block a save, so it counts as "not saved yet".
+            val found = runCatching { repo.findInboxNote(url) }.getOrNull()
+            if (found != null) {
+                duplicate = found
+                saving = false
+                return
+            }
+        }
+        if (!titleEdited && title.isBlank() && url.isNotBlank()) {
+            withTimeoutOrNull(3_000) {
+                while (preview?.title == null) delay(40)
+            }
+        }
+        if (!repo.hasAccess()) {
+            saving = false
+            status = "Open Wisp and pick a vault first."
+            return
+        }
+        val savedTitle = title.trim().ifEmpty { preview?.title ?: fallbackTitle(url) }
+        val draft = NoteDraft(info, url, savedTitle, LocalDate.now(), caption)
+        repo.writeInboxNote(Note.fileName(draft), Note.render(draft))
+            .onSuccess { name ->
+                if (url.isNotBlank()) ExtractWorker.enqueue(ctx, name)
+                title = savedTitle
+                if (info.source == "instagram" && info.type == "reel") {
+                    // A reel's page has no readable text, so Meta AI is the only reader.
+                    // Off by default: the note is saved and nothing leaves the phone.
+                    val action = ReelPolicy.action(
+                        MetaSettings.summarise(ctx).first(),
+                        MetaSettings.loginState(ctx).first(),
+                    )
+                    when (action) {
+                        ReelAction.ReadNow -> {
+                            ctx.startActivity(ReaderActivity.intent(ctx, name))
+                            close()
+                        }
+                        ReelAction.SaveAndWarnLogin -> needLogin = true
+                        ReelAction.SaveOnly -> caught = true
+                    }
+                } else {
+                    caught = true
+                }
+            }
+            .onFailure { status = "Could not save: ${it.message}" }
+        saving = false
+    }
+
+    // A plain val, so the branches below can read the file name without a smart cast.
+    val dup = duplicate
+
     Column(
         Modifier
             .fillMaxWidth()
@@ -176,6 +236,15 @@ private fun SaveSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             when {
+                dup != null -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Ghost(64.dp)
+                        androidx.compose.material3.Icon(painterResource(R.drawable.stk_cauldron), null, tint = Color.Unspecified, modifier = Modifier.size(48.dp))
+                    }
+                    Text("Already saved.", style = MaterialTheme.typography.headlineMedium)
+                    Text(dup.title, color = WispColors.Haze, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                    Text(dup.fileName, color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
                 needLogin -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Ghost(64.dp)
@@ -253,6 +322,22 @@ private fun SaveSheet(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             when {
+                dup != null -> {
+                    WispButton(
+                        "Open the saved note",
+                        onClick = { ctx.startActivity(MainActivity.openNote(ctx, dup.fileName)); close() },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    WispButton(
+                        "Save a copy",
+                        onClick = { scope.launch { save(allowCopy = true) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !saving,
+                        color = WispColors.Ink,
+                        textColor = Color.White,
+                    )
+                    WispButton("Cancel", close, Modifier.fillMaxWidth(), color = WispColors.Purple, textColor = Color.White)
+                }
                 needLogin -> {
                     WispButton(
                         "Log in to Meta AI",
@@ -270,50 +355,7 @@ private fun SaveSheet(
                 else -> {
                     WispButton(
                         label = if (saving) "Saving…" else "Save",
-                        onClick = {
-                            if (!saving) {
-                                scope.launch {
-                                    saving = true
-                                    if (!titleEdited && title.isBlank() && url.isNotBlank()) {
-                                        withTimeoutOrNull(3_000) {
-                                            while (preview?.title == null) delay(40)
-                                        }
-                                    }
-                                    if (!repo.hasAccess()) {
-                                        saving = false
-                                        status = "Open Wisp and pick a vault first."
-                                        return@launch
-                                    }
-                                    val savedTitle = title.trim().ifEmpty { preview?.title ?: fallbackTitle(url) }
-                                    val draft = NoteDraft(info, url, savedTitle, LocalDate.now(), caption)
-                                    repo.writeInboxNote(Note.fileName(draft), Note.render(draft))
-                                        .onSuccess { name ->
-                                            if (url.isNotBlank()) ExtractWorker.enqueue(ctx, name)
-                                            title = savedTitle
-                                            if (info.source == "instagram" && info.type == "reel") {
-                                                // A reel's page has no readable text, so Meta AI is the only reader.
-                                                // Off by default: the note is saved and nothing leaves the phone.
-                                                val action = ReelPolicy.action(
-                                                    MetaSettings.summarise(ctx).first(),
-                                                    MetaSettings.loginState(ctx).first(),
-                                                )
-                                                when (action) {
-                                                    ReelAction.ReadNow -> {
-                                                        ctx.startActivity(ReaderActivity.intent(ctx, name))
-                                                        close()
-                                                    }
-                                                    ReelAction.SaveAndWarnLogin -> needLogin = true
-                                                    ReelAction.SaveOnly -> caught = true
-                                                }
-                                            } else {
-                                                caught = true
-                                            }
-                                        }
-                                        .onFailure { status = "Could not save: ${it.message}" }
-                                    saving = false
-                                }
-                            }
-                        },
+                        onClick = { if (!saving) scope.launch { save(allowCopy = false) } },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !saving,
                     )

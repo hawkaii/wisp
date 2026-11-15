@@ -25,6 +25,12 @@ interface VaultRepository {
     suspend fun writeInboxNote(fileName: String, content: String): Result<String>
 
     /**
+     * The note in `Inbox/` that already holds [url], or null.
+     * Compares cleaned URLs, so `?igsh=` and a different save date still count as the same link.
+     */
+    suspend fun findInboxNote(url: String): SavedLink?
+
+    /**
      * Writes [bytes] to `Inbox/[fileName]`, replacing any file of that name.
      * Used for pictures the note points at, because a remote link can expire. Returns the name written.
      */

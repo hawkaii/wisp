@@ -1,6 +1,8 @@
 package app.wispnotes
 
 import android.app.Application
+import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -37,6 +39,17 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state
     val error = MutableStateFlow<String?>(null)
+
+    /** A note another screen asked Wisp to open. Cleared once it is on screen. */
+    val pendingNote = MutableStateFlow<String?>(null)
+
+    fun requestOpenNote(fileName: String) {
+        pendingNote.value = fileName
+    }
+
+    fun consumePendingNote() {
+        pendingNote.value = null
+    }
 
     fun refresh() = viewModelScope.launch {
         val uri = repo.vaultUri.first()
@@ -78,11 +91,32 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        intent.noteToOpen()?.let(vm::requestOpenNote)
         setContent { WispTheme { WispApp(vm) } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        intent.noteToOpen()?.let(vm::requestOpenNote)
     }
 
     override fun onResume() {
         super.onResume()
         vm.refresh()
     }
+
+    companion object {
+        /** A note file name to show when Wisp comes to the front. */
+        const val EXTRA_OPEN_NOTE = "app.wispnotes.OPEN_NOTE"
+
+        /** Brings Wisp forward on the note that already holds a link, instead of writing a copy of it. */
+        fun openNote(ctx: Context, fileName: String): Intent =
+            Intent(ctx, MainActivity::class.java)
+                .putExtra(EXTRA_OPEN_NOTE, fileName)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    }
 }
+
+/** The note the sender asked to open, or null. */
+private fun Intent.noteToOpen(): String? = getStringExtra(MainActivity.EXTRA_OPEN_NOTE)?.takeIf { it.isNotBlank() }
