@@ -103,6 +103,10 @@ class SafVaultRepository(context: Context) : VaultRepository {
         }
     }
 
+    // The truth is the frontmatter, not the Room index: the index can lag a save by seconds.
+    override suspend fun findInboxNote(url: String): SavedLink? =
+        withContext(Dispatchers.IO) { Duplicates.match(listInboxNotes(), url) }
+
     // shortcut: "wt" rewrites in place (SAF has no atomic rename), and an edit made in Obsidian between our read and write is lost; the window is milliseconds.
     override suspend fun editInboxNote(fileName: String, edit: (String) -> String): Result<String> =
         withContext(Dispatchers.IO) {

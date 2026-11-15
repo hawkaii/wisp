@@ -79,6 +79,15 @@ private fun MainScaffold(vm: MainViewModel, state: AppState) {
     val reduce = LocalReduceMotion.current
     LaunchedEffect(Unit) { ReviewWorker.schedule(ctx) }
 
+    // A share sheet can send the user to the note that already holds a link (#11).
+    val pendingNote by vm.pendingNote.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingNote) {
+        pendingNote?.let {
+            route = "note:$it"
+            vm.consumePendingNote()
+        }
+    }
+
     SharedTransitionLayout {
         AnimatedContent(
             targetState = route,
