@@ -32,5 +32,14 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+
+        <!-- Not exported: only Wisp starts it, and only for a note it already has. -->
+        <activity
+            android:name=".reader.ReaderActivity"
+            android:exported="false"
+            android:label="@string/app_name"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Wisp" />
     </application>
 </manifest>

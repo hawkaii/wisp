@@ -2,6 +2,8 @@ package app.wispnotes.note
 
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -89,5 +91,32 @@ class SectionsTest {
     @Test fun readableBodyHasNoFrontmatterOrUserNotes() {
         val r = Sections.readable(note)
         assertEquals("## Text\n\nThe article text.\nMore text.", r)
+    }
+
+    @Test fun aiAnswerIsWrittenOnceAndReplacedOnASecondRead() {
+        val links = listOf(AiLink("3 articles", "https://example.substack.com/p/a"))
+        val once = Sections.withAi(note, "Five bullets.", links, "https://www.meta.ai/prompt/abc")
+        assertEquals(1, Regex("## AI").findAll(once).count())
+        assertTrue(once.contains("- [3 articles](https://example.substack.com/p/a)"))
+        assertTrue(once.contains("_[Chat with Meta AI](https://www.meta.ai/prompt/abc)_"))
+        assertTrue(once.startsWith(note.trimEnd('\n'))) // it only appends
+
+        val twice = Sections.withAi(once, "Better bullets.", emptyList(), null)
+        assertEquals(1, Regex("## AI").findAll(twice).count())
+        assertFalse(twice.contains("Five bullets."))
+        assertTrue(twice.contains("Better bullets."))
+        assertEquals("Better bullets.", Sections.ai(twice))
+        assertEquals("first thought", Sections.myNotes(twice))
+        assertTrue(twice.contains("## Text\n\nThe article text.\nMore text."))
+    }
+
+    @Test fun anEmptyAnswerChangesNothing() {
+        assertSame(note, Sections.withAi(note, "   ", emptyList(), null))
+        assertNull(Sections.ai(note))
+    }
+
+    @Test fun linkLabelsCannotBreakTheList() {
+        val out = Sections.withAi(note, "answer", listOf(AiLink("a [b] c", "https://example.com/x")), null)
+        assertTrue(out.contains("- [a \\[b\\] c](https://example.com/x)"))
     }
 }

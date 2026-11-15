@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -20,6 +21,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,7 +44,15 @@ private const val SYNC_DOCS = "https://obsidian.md/help/sync-notes"
 
 /** Settings: vault, theme note, a "How to sync" page, version. */
 @Composable
-fun SettingsScreen(vaultPath: String, onChangeVault: (Uri) -> Unit, onBack: () -> Unit) {
+fun SettingsScreen(
+    vaultPath: String,
+    summariseReels: Boolean,
+    metaLoggedIn: Boolean?,
+    onChangeVault: (Uri) -> Unit,
+    onSummarise: (Boolean) -> Unit,
+    onLogin: () -> Unit,
+    onBack: () -> Unit,
+) {
     var sync by rememberSaveable { mutableStateOf(false) }
     val ctx = LocalContext.current
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> if (uri != null) onChangeVault(uri) }
@@ -79,6 +90,48 @@ fun SettingsScreen(vaultPath: String, onChangeVault: (Uri) -> Unit, onBack: () -
                 Card {
                     Text("Theme", style = MaterialTheme.typography.titleMedium)
                     Text("Wisp is dark only, on purpose. There is no light theme yet.", color = WispColors.Lavender)
+                }
+                Card {
+                    Text("Meta AI", style = MaterialTheme.typography.titleMedium)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("Summarise reels", style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                when (metaLoggedIn) {
+                                    true -> "Signed in on this phone."
+                                    false -> "Not signed in on this phone."
+                                    null -> "Not checked on this phone yet."
+                                },
+                                color = WispColors.Lavender,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        Switch(
+                            checked = summariseReels,
+                            onCheckedChange = onSummarise,
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = WispColors.Void,
+                                checkedTrackColor = WispColors.Pumpkin,
+                                uncheckedThumbColor = WispColors.Lavender,
+                                uncheckedTrackColor = WispColors.Void,
+                            ),
+                        )
+                    }
+                    Text(
+                        "Off by default: a shared reel is only saved. When this is on, the reel is read in a browser inside Wisp and the answer goes into the note.",
+                        color = WispColors.Lavender,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (summariseReels && metaLoggedIn == false) {
+                        Text("Meta AI needs one sign-in on this phone before it will read a reel.", color = WispColors.Haze)
+                    }
+                    WispButton(
+                        if (metaLoggedIn == true) "Log in again" else "Log in to Meta AI",
+                        onLogin,
+                        color = WispColors.Purple,
+                        textColor = Color.White,
+                    )
+                    Text("The session stays on this phone. Clearing Wisp's data signs you out.", color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall)
                 }
                 Card {
                     Text("Sync", style = MaterialTheme.typography.titleMedium)

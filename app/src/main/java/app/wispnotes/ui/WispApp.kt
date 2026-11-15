@@ -48,6 +48,7 @@ import app.wispnotes.R
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.wispnotes.MainViewModel
+import app.wispnotes.reader.ReaderActivity
 import app.wispnotes.ui.theme.WispColors
 
 private enum class Tab(val label: String, val icon: Int) {
@@ -91,7 +92,15 @@ private fun MainScaffold(vm: MainViewModel, state: AppState) {
             when {
                 r.startsWith("note:") -> NoteScreen(r.removePrefix("note:"), shared, onBack = { route = "" })
                 r == "whatnow" -> WhatNowScreen(onBack = { route = "" })
-                r == "settings" -> SettingsScreen(state.vaultPath, onChangeVault = { vm.pickVault(it); route = "" }, onBack = { route = "" })
+                r == "settings" -> SettingsScreen(
+                    vaultPath = state.vaultPath,
+                    summariseReels = state.summariseReels,
+                    metaLoggedIn = state.metaLoggedIn,
+                    onChangeVault = { vm.pickVault(it); route = "" },
+                    onSummarise = vm::setSummariseReels,
+                    onLogin = { ctx.startActivity(ReaderActivity.loginIntent(ctx)) },
+                    onBack = { route = "" },
+                )
                 else -> Tabs(index, { index = it }, shared, onOpen = { route = "note:$it" }, onSettings = { route = "settings" }, onWhatNow = { route = "whatnow" })
             }
         }

@@ -28,6 +28,8 @@ data class NoteUi(
     val body: String,
     val transcript: List<TranscriptLine>,
     val transcriptStatus: String?,
+    /** The `## AI` answer, when meta.ai has already read this note. */
+    val ai: String?,
 )
 
 /** The open note: loads the file, autosaves `## My notes` (debounced), moves status, finishes with a rating. */
@@ -63,6 +65,7 @@ class NoteViewModel(app: Application) : AndroidViewModel(app) {
             body = Sections.readable(content),
             transcript = Sections.transcript(content),
             transcriptStatus = Frontmatter.text(content, "transcript"),
+            ai = Sections.ai(content),
         )
         dao.put(entry) // lists update at once
     }
