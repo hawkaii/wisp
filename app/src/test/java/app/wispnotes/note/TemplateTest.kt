@@ -18,7 +18,7 @@ class TemplateTest {
             { "name": "published", "value": "{{published}}", "type": "date" },
             { "name": "tags", "value": "book, reading", "type": "multitext" }
           ],
-          "triggers": ["https://books.example", "/^https:\/\/goodreads\.com\//"],
+          "triggers": ["https://books.example", "/^https:\\/\\/goodreads\\.com\\//"],
           "noteNameFormat": "{{title}}",
           "path": "Books"
         }
