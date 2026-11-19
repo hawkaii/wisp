@@ -53,4 +53,15 @@ class TemplatePickTest {
         assertFalse(TemplatePick.matches("", "https://a.com"))
         assertFalse(TemplatePick.matches("/(broken/", "https://a.com"))
     }
+
+    /**
+     * The maker builds the trigger from the shared URL. This test copies that rule verbatim: if the
+     * two disagree, every template made from a share is dead on arrival.
+     */
+    @Test fun `the trigger the maker writes matches its own link`() {
+        val url = "https://www.instagram.com/reel/ABC123/"
+        val host = java.net.URI(url).host.orEmpty().removePrefix("www.")
+        val trigger = "https://$host/"
+        assertTrue(TemplatePick.matches(trigger, url))
+    }
 }
