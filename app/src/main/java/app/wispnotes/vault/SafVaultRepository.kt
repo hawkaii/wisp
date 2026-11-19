@@ -236,7 +236,7 @@ class SafVaultRepository(context: Context) : VaultRepository {
 
     private suspend fun templatesDir(create: Boolean): DocumentFile? {
         val root = vaultRoot() ?: return null
-        if (!create) return root.findFile(TEMPLATE_FOLDER)?.takeIf { it.isDirectory }
+        if (!create) return childDir(root, TEMPLATE_FOLDER)
         return dir(root, TEMPLATE_FOLDER)
     }
 
@@ -279,8 +279,7 @@ class SafVaultRepository(context: Context) : VaultRepository {
     private fun folderOf(root: DocumentFile, folder: String, create: Boolean): DocumentFile? {
         var doc: DocumentFile = root
         for (part in clean(folder).split('/').filter { it.isNotBlank() }) {
-            doc = doc.findFile(part)?.takeIf { it.isDirectory }
-                ?: if (create) dir(doc, part) else return null
+            doc = childDir(doc, part) ?: if (create) dir(doc, part) else return null
         }
         return doc
     }
@@ -309,8 +308,20 @@ class SafVaultRepository(context: Context) : VaultRepository {
 
     private fun join(folder: String, name: String) = if (clean(folder).isBlank()) name else "${clean(folder)}/$name"
 
-    private fun dir(parent: DocumentFile, name: String): DocumentFile =
+    /**
+     * A child directory by name, ignoring case.
+     *
+     * Storage under `/sdcard` is case-insensitive: `findFile("templates")` misses an existing
+     * `Templates/`, and `createDirectory` then does not fail — the provider quietly makes
+     * `templates (1)`. One vault ended up with five of them and no readable templates. Compare names
+     * ourselves instead of trusting the provider to.
+     */
+    private fun childDir(parent: DocumentFile, name: String): DocumentFile? =
         parent.findFile(name)?.takeIf { it.isDirectory }
+            ?: parent.listFiles().firstOrNull { it.isDirectory && it.name.equals(name, ignoreCase = true) }
+
+    private fun dir(parent: DocumentFile, name: String): DocumentFile =
+        childDir(parent, name)
             ?: parent.createDirectory(name)
             ?: error("Cannot create $name")
 }
