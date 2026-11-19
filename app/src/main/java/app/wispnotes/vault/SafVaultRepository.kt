@@ -28,6 +28,9 @@ private const val LEGACY_FOLDER = "Inbox"
 /** The folder the app keeps template files in. */
 private const val TEMPLATE_FOLDER = "templates"
 
+/** The folders builds 63-66 created instead of finding `Templates/`. */
+private val SCATTERED = Regex("templates \\(\\d+\\)", RegexOption.IGNORE_CASE)
+
 /** Obsidian's own folders: they hold files, not notes the library should show. */
 private val SKIP_FOLDERS = setOf("Attachments", "Templates", "attachments", "templates")
 
@@ -179,11 +182,14 @@ class SafVaultRepository(context: Context) : VaultRepository {
      */
     override suspend fun ensureDefaultTemplate(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val vault = vaultUri.first()?.toString() ?: error("No vault chosen")
-            if (ctx.store.data.first()[KEY_SEEDED] == vault) return@runCatching
             val templates = templatesDir(create = true) ?: error("No vault chosen")
+            // The marker is the folder, not the vault. Builds 63-66 seeded a `templates (N)` folder
+            // beside the real one and then marked the vault done, so `Templates/` never got a file.
+            val marker = templates.uri.toString()
+            if (ctx.store.data.first()[KEY_SEEDED] == marker) return@runCatching
+            recoverScatteredTemplates(templates)
             if (templates.listFiles().any { it.isFile && it.name?.endsWith(".json", ignoreCase = true) == true }) {
-                ctx.store.edit { it[KEY_SEEDED] = vault }
+                ctx.store.edit { it[KEY_SEEDED] = marker }
                 return@runCatching
             }
             val name = Template.DEFAULT_FILE
@@ -192,7 +198,37 @@ class SafVaultRepository(context: Context) : VaultRepository {
             val seed = Template.default().copy(path = seedFolder())
             ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(seed.toJson().toByteArray()) }
                 ?: error("Cannot write $name")
-            ctx.store.edit { it[KEY_SEEDED] = vault }
+            ctx.store.edit { it[KEY_SEEDED] = marker }
+        }
+    }
+
+    /**
+     * Builds 63-66 wrote every template into `templates (1)`, `(2)`... beside the real folder, because
+     * `findFile("templates")` missed `Templates/` on a case-insensitive volume. Those files are the
+     * user's work, so they are copied back before anything is seeded, and the duplicates removed.
+     */
+    private suspend fun recoverScatteredTemplates(target: DocumentFile) {
+        val root = runCatching { DocumentFile.fromTreeUri(ctx, vaultUri.first() ?: return) }.getOrNull() ?: return
+        val scattered = runCatching {
+            root.listFiles().filter { it.isDirectory && SCATTERED.matches(it.name.orEmpty()) }
+        }.getOrDefault(emptyList())
+        for (folder in scattered) {
+            val files = runCatching { folder.listFiles() }.getOrDefault(emptyArray<DocumentFile>())
+                .filter { it.isFile && it.name.orEmpty().endsWith(".json", ignoreCase = true) }
+            var allKept = true
+            for (file in files) {
+                val name = file.name.orEmpty()
+                if (target.findFile(name) != null) continue
+                val copied = runCatching {
+                    val copy = target.createFile("application/json", name) ?: return@runCatching false
+                    ctx.contentResolver.openInputStream(file.uri)?.use { input ->
+                        ctx.contentResolver.openOutputStream(copy.uri, "wt")?.use { output -> input.copyTo(output) }
+                    } != null
+                }.getOrDefault(false)
+                if (!copied) allKept = false
+            }
+            // Only remove the stray folder once every template in it has a copy.
+            if (allKept) runCatching { folder.delete() }
         }
     }
 
