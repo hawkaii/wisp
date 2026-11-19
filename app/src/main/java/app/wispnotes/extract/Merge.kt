@@ -12,8 +12,9 @@ import java.net.URI
 object Merge {
     /**
      * [template] is the template the note was saved with, or null for the plain format. A template
-     * adds properties and shapes the `## Text` body; it cannot rewrite a key the app owns, and the
-     * user's value always wins over a rendered one.
+     * adds properties and tags; it cannot rewrite a key the app owns, and the user's value always
+     * wins over a rendered one. The `## Text` body is rendered at save and never re-rendered here:
+     * an edit the user made under it must stand.
      */
     fun apply(content: String, e: Extracted, template: Template? = null, status: String = e.status): String {
         val url = Frontmatter.text(content, "url").orEmpty()
@@ -41,11 +42,8 @@ object Merge {
         if (merged != tags) set["tags"] = Frontmatter.yamlList(merged) // untouched unless a tag is missing
         e.transcriptStatus?.let { set["transcript"] = it }
         val mergedContent = Frontmatter.set(content, set)
-        val text = if (template != null && capture != null) {
-            TemplateRender.body(template, capture).orEmpty()
-        } else {
-            e.text.orEmpty()
-        }
+        // `withText` keeps an existing body, so a template's `## Text` written at save wins.
+        val text = e.text.orEmpty()
         return Sections.withTranscript(mergedContent, e.transcript, url).let { withTranscript ->
             set["extracted"] = status
             Sections.withText(Frontmatter.set(withTranscript, set), text)

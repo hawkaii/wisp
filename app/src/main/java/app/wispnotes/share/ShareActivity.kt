@@ -51,12 +51,13 @@ import app.wispnotes.extract.ExtractWorker
 import app.wispnotes.extract.Extracted
 import app.wispnotes.extract.Extractors
 import app.wispnotes.extract.OkHttpFetcher
+import app.wispnotes.note.Capture
+import app.wispnotes.note.Frontmatter
 import app.wispnotes.note.Note
 import app.wispnotes.note.NoteDraft
 import app.wispnotes.note.Source
 import app.wispnotes.note.Template
 import app.wispnotes.note.TemplatePick
-import app.wispnotes.note.Templates
 import app.wispnotes.reader.MetaSettings
 import app.wispnotes.reader.ReaderActivity
 import app.wispnotes.reader.ReelAction
@@ -130,27 +131,39 @@ private fun SaveSheet(
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val info = remember(url) { Source.detect(url) }
-    /** Templates come from the vault; the built-ins are the fallback before a vault is chosen. */
-    var templates by remember { mutableStateOf(Templates.builtIn) }
-    var template by remember { mutableStateOf<Template?>(Templates.builtIn.firstOrNull()) }
+    /** Templates come from the vault. There is no built-in list: a vault with none blocks the save. */
+    var templates by remember { mutableStateOf<List<Template>>(emptyList()) }
+    var templatesLoaded by remember { mutableStateOf(false) }
+    var template by remember { mutableStateOf<Template?>(null) }
+    /** The page read has finished, however it went. A template that reads the page waits for it. */
+    var pageDone by remember { mutableStateOf(false) }
+    /** Bumped by Retry, which restarts the page read below. */
+    var fetchKey by remember { mutableStateOf(0) }
     val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
 
-    LaunchedEffect(url) {
+    LaunchedEffect(Unit) {
         val loaded = withContext(Dispatchers.IO) {
             repo.readTemplates().mapNotNull { (_, text) -> Template.fromJson(text).getOrNull() }
-        }.ifEmpty { Templates.builtIn }
+        }
         templates = loaded
         template = TemplatePick.pick(loaded, url)
+        templatesLoaded = true
     }
 
-    LaunchedEffect(url) {
-        if (url.isBlank()) return@LaunchedEffect
+    LaunchedEffect(url, fetchKey) {
+        pageDone = false
+        if (url.isBlank()) {
+            pageDone = true
+            return@LaunchedEffect
+        }
         val quick = withContext(Dispatchers.IO) {
             if (info.source == "youtube") Extractors.youtubeQuick(url, OkHttpFetcher::get)
             else Extractors.extract(url, OkHttpFetcher::get)
         }
         preview = quick
         if (!titleEdited) quick.title?.let { title = it }
+        // The page text the template needs is here. A slow full read must not hold a save.
+        pageDone = true
         if (info.source == "youtube") {
             val full = withContext(Dispatchers.IO) { Extractors.extract(url, OkHttpFetcher::get) }
             preview = Extracted(
@@ -171,8 +184,15 @@ private fun SaveSheet(
         }
     }
 
-    // One save path for "Save" and "Save a copy"; only the copy path skips the duplicate check.
-    suspend fun save(allowCopy: Boolean) {
+    // Nothing matched: the sheet offers to make a template instead of picking one silently.
+    val blocked = templatesLoaded && template == null
+    val defaultTemplate = templates.firstOrNull { it.name.equals("Default", ignoreCase = true) }
+    val host = remember(url) { runCatching { URI(url).host }.getOrNull()?.removePrefix("www.").orEmpty() }
+    val pageFailed = pageDone && preview?.status == "failed"
+    val waiting = template?.needsPage() == true && !pageDone
+
+    // One save path for every button; only the copy path skips the duplicate check.
+    suspend fun save(allowCopy: Boolean, withoutPage: Boolean = false) {
         saving = true
         status = null
         duplicate = null
@@ -182,6 +202,26 @@ private fun SaveSheet(
             if (found != null) {
                 duplicate = found
                 saving = false
+                return
+            }
+        }
+        val chosen = template
+        if (chosen == null) {
+            saving = false
+            status = "Make a template, or use the default one."
+            return
+        }
+        // A template that reads the page waits for it: a half note is worse than a slow save.
+        if (chosen.needsPage() && !withoutPage) {
+            if (!pageDone) withTimeoutOrNull(PAGE_WAIT_MS) { while (!pageDone) delay(50) }
+            if (!pageDone) {
+                saving = false
+                status = "The page is still loading."
+                return
+            }
+            if (pageFailed) {
+                saving = false
+                status = "The page could not be read."
                 return
             }
         }
@@ -196,10 +236,16 @@ private fun SaveSheet(
             return
         }
         val savedTitle = title.trim().ifEmpty { preview?.title ?: fallbackTitle(url) }
-        val chosen = template
         val draft = NoteDraft(info, url, savedTitle, LocalDate.now(), caption)
-        repo.writeNote(Note.fileName(draft, chosen), Note.render(draft, chosen))
+        // The body is rendered here, once. Extraction never rewrites `## Text` afterwards.
+        val withPage = chosen.needsPage() && !withoutPage && !pageFailed
+        val capture = if (withPage) Capture.of(draft, preview) else Capture.of(draft)
+        repo.writeNote(Note.fileName(draft, chosen), Note.render(draft, chosen, capture), chosen.path)
             .onSuccess { name ->
+                if (chosen.needsPage() && !withPage) {
+                    // The page may still arrive, so the note says failed and the worker keeps trying.
+                    repo.editNote(name) { Frontmatter.set(it, mapOf("extracted" to "failed")) }
+                }
                 if (url.isNotBlank()) ExtractWorker.enqueue(ctx, name)
                 title = savedTitle
                 if (info.source == "instagram" && info.type == "reel") {
@@ -284,6 +330,17 @@ private fun SaveSheet(
                         info.tags.forEach { WispChip("#$it") }
                         preview?.minutes?.let { WispChip("~$it min") }
                     }
+                }
+                blocked -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Ghost(64.dp)
+                        androidx.compose.material3.Icon(painterResource(R.drawable.stk_cauldron), null, tint = Color.Unspecified, modifier = Modifier.size(48.dp))
+                    }
+                    Text("No template for ${host.ifBlank { "this link" }}", style = MaterialTheme.typography.headlineMedium)
+                    Text(
+                        "A template decides how a link becomes a note. Make one for this site, or use the default.",
+                        color = WispColors.Haze,
+                    )
                 }
                 else -> {
                     Ghost(64.dp)
@@ -378,6 +435,52 @@ private fun SaveSheet(
                     WispButton("Done", close, Modifier.fillMaxWidth())
                     Text("Closes by itself in 3 s", color = WispColors.Haze, style = MaterialTheme.typography.bodySmall)
                 }
+                blocked -> {
+                    WispButton(
+                        "Make a template",
+                        onClick = {
+                            ctx.startActivity(MainActivity.newTemplate(ctx, url, caption))
+                            close()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    // Picking the default does not write: the page may still be loading, and the
+                    // sheet has to read it or offer "Save without the page" like any other template.
+                    defaultTemplate?.let { fallback ->
+                        WispButton(
+                            "Use Default",
+                            onClick = { template = fallback },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !saving,
+                            color = WispColors.Ink,
+                            textColor = Color.White,
+                        )
+                    }
+                    WispButton("Cancel", close, Modifier.fillMaxWidth(), color = WispColors.Purple, textColor = Color.White)
+                }
+                !templatesLoaded -> WispButton(
+                    label = "Loading templates…",
+                    onClick = {},
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = false,
+                )
+                waiting -> WispButton(
+                    label = "Reading the page…",
+                    onClick = {},
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = false,
+                )
+                template?.needsPage() == true && pageFailed -> {
+                    WispButton("Retry", onClick = { fetchKey++ }, modifier = Modifier.fillMaxWidth())
+                    WispButton(
+                        "Save without the page",
+                        onClick = { if (!saving) scope.launch { save(allowCopy = false, withoutPage = true) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !saving,
+                        color = WispColors.Ink,
+                        textColor = Color.White,
+                    )
+                }
                 else -> {
                     WispButton(
                         label = if (saving) "Saving…" else "Save",
@@ -390,6 +493,9 @@ private fun SaveSheet(
         }
     }
 }
+
+/** How long a template that reads the page waits before it gives up and offers the page-less save. */
+private const val PAGE_WAIT_MS = 20_000L
 
 private fun fallbackTitle(url: String): String {
     val uri = runCatching { URI(url) }.getOrNull()

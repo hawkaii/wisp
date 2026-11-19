@@ -9,7 +9,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.documentfile.provider.DocumentFile
 import app.wispnotes.index.RawNote
-import app.wispnotes.note.Templates
+import app.wispnotes.note.Template
+import app.wispnotes.note.TemplateFolders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -23,6 +24,9 @@ private val KEY_FOLDER = stringPreferencesKey("note_folder")
 
 /** Where new notes go until the user picks another folder. */
 const val DEFAULT_NOTE_FOLDER = "Inbox"
+
+/** The folder the app keeps template files in. */
+private const val TEMPLATE_FOLDER = "templates"
 
 /** Obsidian's own folders: they hold files, not notes the library should show. */
 private val SKIP_FOLDERS = setOf("Attachments", "Templates", "attachments", "templates")
@@ -81,12 +85,12 @@ class SafVaultRepository(context: Context) : VaultRepository {
         ctx.store.edit { it[KEY_FOLDER] = clean(folder) }
     }
 
-    override suspend fun writeNote(fileName: String, content: String): Result<String> =
+    override suspend fun writeNote(fileName: String, content: String, folder: String?): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val root = vaultRoot() ?: error("No vault chosen")
-                val folder = noteFolder()
-                val target = folderOf(root, folder, create = true) ?: error("Cannot open $folder")
+                val where = folder ?: noteFolder()
+                val target = folderOf(root, where, create = true) ?: error("Cannot open $where")
                 val base = fileName.removeSuffix(".md")
                 var name = fileName
                 var n = 2
@@ -95,7 +99,7 @@ class SafVaultRepository(context: Context) : VaultRepository {
                 val file = target.createFile("application/octet-stream", name) ?: error("Cannot create $name")
                 ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(content.toByteArray()) }
                     ?: error("Cannot write $name")
-                join(folder, name)
+                join(where, name)
             }
         }
 
@@ -116,8 +120,16 @@ class SafVaultRepository(context: Context) : VaultRepository {
     // shortcut: reads every file in full over SAF on each scan; fine for hundreds of notes, read only the head if a vault gets huge.
     override suspend fun listNotes(): List<RawNote> = withContext(Dispatchers.IO) {
         val root = vaultRoot() ?: return@withContext emptyList()
+        // Only the folders templates name. The rest of the vault is the user's, not the library.
+        val folders = TemplateFolders.of(
+            readTemplates().mapNotNull { (_, text) -> Template.fromJson(text).getOrNull() },
+        )
         val out = ArrayList<RawNote>()
-        walk(root, "", out, 0)
+        for (folder in folders) {
+            val doc = root.findFile(folder)?.takeIf { it.isDirectory } ?: continue
+            walk(doc, "$folder/", out, 0)
+            if (out.size >= MAX_NOTES) break
+        }
         out
     }
 
@@ -147,29 +159,14 @@ class SafVaultRepository(context: Context) : VaultRepository {
     }
 
     /**
-     * The JSON files in `Wisp/templates/`, seeding the built-ins on first use. They are real files
-     * in the vault, not a hidden string: the user can open one in Obsidian, and an export imports
-     * into the clipper.
+     * The JSON files in `Wisp/templates/`. They are real files in the vault, not a hidden string:
+     * the user can open one in Obsidian, and an export imports into the clipper.
      */
     override suspend fun readTemplates(): List<Pair<String, String>> = withContext(Dispatchers.IO) {
         runCatching {
-            val uri = vaultUri.first() ?: return@runCatching emptyList<Pair<String, String>>()
-            val root = DocumentFile.fromTreeUri(ctx, uri) ?: return@runCatching emptyList<Pair<String, String>>()
-            val templates = dir(root, "templates")
-
-            if (templates.listFiles().none { it.isFile && it.name?.endsWith(".json") == true }) {
-                Templates.builtIn.forEach { template ->
-                    val file = runCatching { templates.createFile("application/json", template.fileName()) }.getOrNull()
-                    if (file != null) {
-                        runCatching {
-                            ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(template.toJson().toByteArray()) }
-                        }
-                    }
-                }
-            }
-
+            val templates = templatesDir(create = false) ?: return@runCatching emptyList<Pair<String, String>>()
             templates.listFiles()
-                .filter { it.isFile && it.name?.endsWith(".json") == true }
+                .filter { it.isFile && it.name?.endsWith(".json", ignoreCase = true) == true }
                 .sortedBy { it.name.orEmpty() }
                 .mapNotNull { file ->
                     val text = runCatching {
@@ -178,6 +175,58 @@ class SafVaultRepository(context: Context) : VaultRepository {
                     if (text == null) null else file.name.orEmpty() to text
                 }
         }.getOrDefault(emptyList())
+    }
+
+    // A seed, not a fallback: a vault with any template file at all is never written to.
+    override suspend fun ensureDefaultTemplate(): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val templates = templatesDir(create = true) ?: error("No vault chosen")
+            if (templates.listFiles().any { it.isFile && it.name?.endsWith(".json", ignoreCase = true) == true }) return@runCatching
+            val name = Template.DEFAULT_FILE
+            templates.findFile(name)?.delete()
+            val file = templates.createFile("application/json", name) ?: error("Cannot create $name")
+            ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(Template.default().toJson().toByteArray()) }
+                ?: error("Cannot write $name")
+        }
+    }
+
+    override suspend fun writeTemplate(fileName: String, text: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val name = templateFileName(fileName)
+                val templates = templatesDir(create = true) ?: error("No vault chosen")
+                templates.findFile(name)?.delete()
+                val file = templates.createFile("application/json", name) ?: error("Cannot create $name")
+                ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(text.toByteArray()) }
+                    ?: error("Cannot write $name")
+                file.name ?: name
+            }
+        }
+
+    override suspend fun deleteTemplate(fileName: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val name = templateFileName(fileName)
+            val templates = templatesDir(create = false) ?: error("No vault chosen")
+            val file = templates.findFile(name) ?: error("$name not found")
+            require(file.delete()) { "Cannot delete $name" }
+        }
+    }
+
+    private suspend fun templatesDir(create: Boolean): DocumentFile? {
+        val root = vaultRoot() ?: return null
+        if (!create) return root.findFile(TEMPLATE_FOLDER)?.takeIf { it.isDirectory }
+        return dir(root, TEMPLATE_FOLDER)
+    }
+
+    /** A template file is a lowercase slug with `.json`: the name is also the template's id. */
+    private fun templateFileName(fileName: String): String {
+        require(fileName.endsWith(".json", ignoreCase = true)) { "A template file ends in .json." }
+        val slug = fileName.dropLast(5)
+            .lowercase()
+            .replace(Regex("[^a-z0-9-]+"), "-")
+            .trim('-')
+        require(slug.isNotEmpty()) { "A template needs a file name." }
+        return "$slug.json"
     }
 
     private suspend fun vaultRoot(): DocumentFile? {

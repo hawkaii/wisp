@@ -16,7 +16,6 @@ import app.wispnotes.index.WispDb
 import app.wispnotes.note.Frontmatter
 import app.wispnotes.note.Source
 import app.wispnotes.note.Template
-import app.wispnotes.note.Templates
 import app.wispnotes.vault.SafVaultRepository
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -37,7 +36,7 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         } else {
             withContext(Dispatchers.IO) {
                 repo.readTemplates().mapNotNull { (_, text) -> Template.fromJson(text).getOrNull() }
-            }.ifEmpty { Templates.builtIn }.firstOrNull { it.name == templateName }
+            }.firstOrNull { it.name == templateName }
         }
         val attempts = Frontmatter.text(current, "extract_attempts")?.toIntOrNull() ?: 0
         if (attempts >= MAX_ATTEMPTS) {

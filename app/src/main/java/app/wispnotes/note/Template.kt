@@ -9,10 +9,12 @@ import org.json.JSONObject
  * The format is the clipper's own export shape (`schemaVersion 0.1.0`), so a template file moves
  * between the two apps with no converter. `id` is not part of the format: the file name is the id.
  *
- * One deliberate difference, documented in [Templates]: the clipper's `noteContentFormat` is the whole
- * note body. Here the app owns the file (`## My notes`, `## Transcript`, `## AI`, frontmatter), so a
- * template's body is written inside the app-owned `## Text` section. Everything else — variables,
- * filters, conditionals, loops, properties, triggers — behaves the same.
+ * One deliberate difference: the clipper's `noteContentFormat` is the whole note body. Here the app
+ * owns the file (`## My notes`, `## Transcript`, `## AI`, frontmatter), so a template's body is
+ * written inside the app-owned `## Text` section. Everything else — variables, filters,
+ * conditionals, loops, properties, triggers — behaves the same.
+ *
+ * [path] is a folder name, not a path: notes go to one folder, and the library reads it back.
  */
 data class Template(
     val name: String,
@@ -21,11 +23,15 @@ data class Template(
     val properties: List<TemplateProperty> = emptyList(),
     val triggers: List<String> = emptyList(),
     val noteNameFormat: String = "{{title}}",
-    val path: String = "Inbox",
+    val path: String = TemplateFolders.DEFAULT,
     val context: String? = null,
 ) {
-    /** A file name for this template, used when the defaults are written into the vault. */
+    /** A file name for this template, used when it is written into the vault. */
     fun fileName(): String = Note.slug(name) + ".json"
+
+    /** True when the template cannot be rendered before the page is read. */
+    fun needsPage(): Boolean =
+        noteContentFormat.contains("{{content}}") || noteContentFormat.contains("{{transcript}}")
 
     /** The clipper's export shape and key order. */
     fun toJson(): String {
@@ -80,8 +86,15 @@ data class Template(
             val content = json.optString("noteContentFormat")
             require(content.isNotBlank()) { "A template needs noteContentFormat." }
 
-            val behavior = TemplateBehavior.from(json.optString("behavior"))
-                ?: TemplateBehavior.CREATE
+            // Only `create` is supported, and only a folder name: the app writes one note, once.
+            val wire = json.optString("behavior").trim()
+            val behavior = if (wire.isEmpty()) TemplateBehavior.CREATE else TemplateBehavior.from(wire)
+            require(behavior == TemplateBehavior.CREATE) { "Only behavior \"create\" is supported." }
+
+            val path = json.optString("path").trim().ifBlank { TemplateFolders.DEFAULT }
+            require(!path.contains('/')) { "A template folder is one name, with no slashes." }
+            require(!path.contains("..")) { "A template folder cannot point above the vault." }
+            require(!path.startsWith(".")) { "A template folder cannot start with a dot." }
 
             Template(
                 name = name,
@@ -90,10 +103,34 @@ data class Template(
                 properties = propertiesOf(json.optJSONArray("properties")),
                 triggers = stringsOf(json.optJSONArray("triggers")),
                 noteNameFormat = json.optString("noteNameFormat").ifBlank { "{{title}}" },
-                path = json.optString("path").ifBlank { "Inbox" },
+                path = path,
                 context = json.optString("context").ifBlank { null },
             )
         }
+
+        /**
+         * The template seeded into `templates/default.json` once, at setup.
+         *
+         * Not a runtime fallback: a vault that has template files is never seeded, and a URL that
+         * matches nothing is offered a template instead of being saved with this one silently.
+         */
+        fun default(): Template = Template(
+            name = "Default",
+            noteContentFormat = "{% if description %}> {{description}}\n\n{% endif %}{{content}}",
+            properties = listOf(
+                TemplateProperty("author", "{{author}}"),
+                TemplateProperty("published", "{{published}}", PropertyType.DATE),
+                TemplateProperty("created", "{{date}}", PropertyType.DATE),
+                TemplateProperty("description", "{{description}}", PropertyType.TEXT),
+                TemplateProperty("tags", "clippings", PropertyType.MULTITEXT),
+            ),
+            triggers = emptyList(),
+            noteNameFormat = "{{title}}",
+            path = TemplateFolders.DEFAULT,
+        )
+
+        /** The file name the default template is seeded under. */
+        const val DEFAULT_FILE = "default.json"
 
         private fun propertiesOf(array: JSONArray?): List<TemplateProperty> {
             if (array == null) return emptyList()
@@ -152,69 +189,4 @@ enum class PropertyType(val wire: String) {
     companion object {
         fun from(value: String?): PropertyType? = values().firstOrNull { it.wire == value }
     }
-}
-
-/**
- * The templates that ship with the app, in the clipper's language.
- *
- * They are seeded into `Wisp/templates/` on first use, so the user can edit a real file instead of a
- * hidden string, and an exported file imports into the clipper unchanged.
- *
- * The first template in the list is the fallback, as it is in the clipper: a URL that matches no
- * trigger uses it.
- */
-object Templates {
-    val article = Template(
-        name = "Article",
-        noteContentFormat = """
-            {% if description %}> {{description}}
-
-            {% endif %}{{content}}
-        """.trimIndent(),
-        properties = listOf(
-            TemplateProperty("author", "{{author}}"),
-            TemplateProperty("site", "{{site}}"),
-            TemplateProperty("published", "{{published}}", PropertyType.DATE),
-            TemplateProperty("created", "{{date}}", PropertyType.DATE),
-            TemplateProperty("tags", "clippings", PropertyType.MULTITEXT),
-        ),
-        triggers = emptyList(),
-        noteNameFormat = "{{title}}",
-        path = "Inbox",
-    )
-
-    val reel = Template(
-        name = "Instagram reel",
-        noteContentFormat = """
-            {% if author %}**@{{author}}**
-
-            {% endif %}### Summary
-
-            {{content}}
-            {% if linksMd %}
-            ### Links
-
-            {{linksMd}}
-            {% endif %}{% if chatUrl %}
-            [Full Meta AI chat]({{chatUrl}})
-            {% endif %}
-        """.trimIndent(),
-        properties = listOf(
-            TemplateProperty("author", "{{author}}"),
-            TemplateProperty("created", "{{date}}", PropertyType.DATE),
-            TemplateProperty("tags", "reel", PropertyType.MULTITEXT),
-            TemplateProperty("chat", "{{chatUrl}}"),
-            TemplateProperty("image", "{{image}}"),
-        ),
-        triggers = listOf(
-            "https://www.instagram.com/reel/",
-            "https://www.instagram.com/reels/",
-            "https://www.instagram.com/p/",
-        ),
-        noteNameFormat = "{{title}}",
-        path = "Inbox",
-    )
-
-    /** Order is priority: [article] is first, so it is the fallback. */
-    val builtIn: List<Template> = listOf(article, reel)
 }

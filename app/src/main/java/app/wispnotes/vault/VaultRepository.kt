@@ -30,10 +30,11 @@ interface VaultRepository {
     suspend fun setNoteFolder(folder: String)
 
     /**
-     * Writes [content] as a new note in the note folder. Never overwrites: a taken name gets `-2`, `-3`...
-     * Returns the note's path relative to the vault root, which is how every other call names it.
+     * Writes [content] as a new note in [folder], or in the note folder when null. Never overwrites:
+     * a taken name gets `-2`, `-3`... Returns the note's path relative to the vault root, which is
+     * how every other call names it.
      */
-    suspend fun writeNote(fileName: String, content: String): Result<String>
+    suspend fun writeNote(fileName: String, content: String, folder: String? = null): Result<String>
 
     /**
      * The first note that already holds [url], or null.
@@ -48,9 +49,8 @@ interface VaultRepository {
     suspend fun writeFile(fileName: String, mime: String, bytes: ByteArray): Result<String>
 
     /**
-     * Every `.md` file in the vault with its text, wherever it sits.
-     * `Text/` and other Obsidian folders are walked past; notes in the root and in `Inbox/`,
-     * `Clippings/`, `References/` are all included.
+     * Every `.md` file in the folders the templates name, wherever it sits inside them.
+     * The vault root and folders no template asks for are the user's own notes and are not read.
      */
     suspend fun listNotes(): List<RawNote>
 
@@ -62,10 +62,25 @@ interface VaultRepository {
      * A bare file name resolves inside the note folder, which is where pictures live.
      */
     suspend fun noteUri(path: String): Uri?
+
     /**
-     * The JSON files in `Wisp/templates/`, as file name to text. Seeds the built-in templates on
-     * first use. Empty when there is no vault: callers fall back to
-     * [app.wispnotes.note.Templates.builtIn].
+     * The JSON files in `Wisp/templates/`, as file name to text. Empty when there is no vault or no
+     * template file yet. Nothing is seeded here: a read never writes.
      */
     suspend fun readTemplates(): List<Pair<String, String>>
+
+    /**
+     * Writes the default template by itself, once, when the templates folder holds no JSON at all.
+     * A one-time seed, not a fallback: a vault the user has templates in is never touched.
+     */
+    suspend fun ensureDefaultTemplate(): Result<Unit>
+
+    /**
+     * Writes `<vault>/templates/<fileName>`, replacing an existing file. [fileName] must end in
+     * `.json`; it is sanitised to a safe slug. Returns the name written.
+     */
+    suspend fun writeTemplate(fileName: String, text: String): Result<String>
+
+    /** Deletes `<vault>/templates/<fileName>`. */
+    suspend fun deleteTemplate(fileName: String): Result<Unit>
 }

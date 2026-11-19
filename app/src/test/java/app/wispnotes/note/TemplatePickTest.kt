@@ -36,14 +36,12 @@ class TemplatePickTest {
 
     @Test fun schemaMatchesTheTypesOnThePage() {
         assertEquals("Recipe", TemplatePick.pick(all, "https://cook.example/x", listOf("Recipe"))?.name)
-        assertEquals("Article", TemplatePick.pick(all, "https://cook.example/x", listOf("NewsArticle"))?.name)
+        // A type no trigger names matches nothing: the sheet offers a template instead.
+        assertNull(TemplatePick.pick(all, "https://cook.example/x", listOf("NewsArticle")))
     }
 
-    @Test fun theFirstTemplateIsTheFallback() {
-        assertEquals("Article", TemplatePick.pick(all, "https://example.com/post")?.name)
-    }
-
-    @Test fun nothingToPick() {
+    @Test fun nothingMatchingIsNull() {
+        assertNull(TemplatePick.pick(all, "https://example.com/post"))
         assertNull(TemplatePick.pick(emptyList(), "https://example.com"))
     }
 

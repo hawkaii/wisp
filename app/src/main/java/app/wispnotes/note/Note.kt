@@ -8,7 +8,7 @@ data class NoteDraft(
     val url: String,
     val title: String,
     val saved: LocalDate,
-    /** Pasted by the user when extraction cannot read the page (Instagram). Goes under `## Text`. */
+    /** Pasted by the user when extraction cannot read the page (Instagram). `{{caption}}` for a template. */
     val caption: String = "",
 )
 
@@ -26,9 +26,13 @@ object Note {
         return "${d.saved}-${slug(name)}.md"
     }
 
-    fun render(d: NoteDraft, template: Template? = null): String = buildString {
-        val capture = if (template == null) null else Capture.of(d)
-        val extraTags = if (template == null || capture == null) emptyList() else TemplateRender.tags(template, capture)
+    /**
+     * The note as written at share time. [capture] is what the template can read now: the draft
+     * alone, or the draft plus the page when the template needs it. The template body is rendered
+     * here, once, so extraction never has to rewrite `## Text`.
+     */
+    fun render(d: NoteDraft, template: Template? = null, capture: Capture = Capture.of(d)): String = buildString {
+        val extraTags = if (template == null) emptyList() else TemplateRender.tags(template, capture)
         val tags = Frontmatter.mergeTags(d.info.tags, extraTags)
 
         appendLine("---")
@@ -43,7 +47,7 @@ object Note {
         appendLine("tags: [${tags.joinToString(", ")}]")
         appendLine("extracted: pending")
         appendLine("transcript: pending")
-        if (template != null && capture != null) {
+        if (template != null) {
             // The name is how the worker finds the template again when the page is extracted.
             appendLine("wisp_template: ${Frontmatter.quote(template.name)}")
             TemplateRender.properties(template, capture).forEach { (key, value) -> appendLine("$key: $value") }
@@ -52,6 +56,10 @@ object Note {
         appendLine()
         appendLine("## My notes")
         appendLine()
-        if (d.caption.isNotBlank()) append(Sections.textBlock(d.caption))
+        if (template != null) {
+            TemplateRender.body(template, capture)?.let { append(Sections.textBlock(it)) }
+        } else if (d.caption.isNotBlank()) {
+            append(Sections.textBlock(d.caption))
+        }
     }
 }
