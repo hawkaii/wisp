@@ -8,7 +8,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,13 +46,12 @@ private const val SYNC_DOCS = "https://obsidian.md/help/sync-notes"
 @Composable
 fun SettingsScreen(
     vaultPath: String,
-    noteFolder: String,
     summariseReels: Boolean,
     metaLoggedIn: Boolean?,
     onChangeVault: (Uri) -> Unit,
-    onFolder: (String) -> Unit,
     onSummarise: (Boolean) -> Unit,
     onLogin: () -> Unit,
+    onTemplates: () -> Unit,
     onBack: () -> Unit,
 ) {
     var sync by rememberSaveable { mutableStateOf(false) }
@@ -91,18 +89,13 @@ fun SettingsScreen(
                     WispButton("Change vault", { pick.launch(null) })
                 }
                 Card {
-                    Text("Where new notes go", style = MaterialTheme.typography.titleMedium)
+                    Text("Templates", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Everything in the vault is readable, wherever it sits. This only picks the folder Wisp writes to.",
+                        "A template decides a note's name, folder, frontmatter and text. Files live in templates/ in your vault.",
                         color = WispColors.Lavender,
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        item { WispChip("Inbox", selected = noteFolder == "Inbox") { onFolder("Inbox") } }
-                        item { WispChip("Clippings", selected = noteFolder == "Clippings") { onFolder("Clippings") } }
-                        item { WispChip("References", selected = noteFolder == "References") { onFolder("References") } }
-                        item { WispChip("Root", selected = noteFolder.isBlank()) { onFolder("") } }
-                    }
+                    WispButton("Templates", onTemplates)
                 }
                 Card {
                     Text("Theme", style = MaterialTheme.typography.titleMedium)

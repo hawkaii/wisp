@@ -82,7 +82,8 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         if (Source.detect(url).source != "instagram") return found // the case with a signed link; other sources keep stable URLs
         val bytes = OkHttpFetcher.getBytes(remote) ?: return found
         val ext = Images.extension(bytes) ?: return found
-        val saved = repo.writeFile(Images.fileName(noteFile, ext), Images.mime(ext), bytes)
+        val folder = noteFile.substringBeforeLast('/', "")
+        val saved = repo.writeFile(Images.fileName(noteFile, ext), Images.mime(ext), bytes, folder)
             .getOrNull() ?: return found
         Log.d(TAG, "stage=picture_kept file=$saved bytes=${bytes.size}")
         return found.copy(thumbnail = saved)

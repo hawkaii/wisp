@@ -28,8 +28,6 @@ data class AppState(
     val vaultLost: Boolean = false,
     /** Readable vault location for Settings, without the provider prefix. */
     val vaultPath: String = "",
-    /** Where new notes are written: `Inbox` unless the user picked another. `""` is the vault root. */
-    val noteFolder: String = "Inbox",
     /** Settings > Meta AI: summarise a shared reel. Off by default. */
     val summariseReels: Boolean = false,
     /** The last live check of meta.ai's login button. Null means never checked. A hint, not the authority. */
@@ -79,7 +77,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             vaultOk = ok,
             vaultLost = uri != null && !ok,
             vaultPath = uri?.lastPathSegment.orEmpty().substringAfter(':'),
-            noteFolder = repo.noteFolder(),
             summariseReels = MetaSettings.summarise(getApplication()).first(),
             metaLoggedIn = MetaSettings.loginState(getApplication()).first(),
         )
@@ -87,12 +84,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setSummariseReels(on: Boolean) = viewModelScope.launch {
         MetaSettings.setSummarise(getApplication(), on)
-        refresh()
-    }
-
-    /** Where new notes land. Reads cover the whole vault either way, so this never hides a note. */
-    fun setNoteFolder(folder: String) = viewModelScope.launch {
-        repo.setNoteFolder(folder)
         refresh()
     }
 

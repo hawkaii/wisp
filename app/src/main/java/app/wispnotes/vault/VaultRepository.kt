@@ -22,19 +22,11 @@ interface VaultRepository {
     suspend fun hasAccess(): Boolean
 
     /**
-     * Where new notes go, relative to the vault root: `"Inbox"` unless the user picked another,
-     * `""` for the root itself. Reads follow the same value, so the two never disagree.
+     * Writes [content] as a new note in [folder]. The folder comes from the template, so it is always
+     * known: there is no ambient setting for it. Never overwrites: a taken name gets `-2`, `-3`...
+     * Returns the note's path relative to the vault root, which is how every other call names it.
      */
-    suspend fun noteFolder(): String
-
-    suspend fun setNoteFolder(folder: String)
-
-    /**
-     * Writes [content] as a new note in [folder], or in the note folder when null. Never overwrites:
-     * a taken name gets `-2`, `-3`... Returns the note's path relative to the vault root, which is
-     * how every other call names it.
-     */
-    suspend fun writeNote(fileName: String, content: String, folder: String? = null): Result<String>
+    suspend fun writeNote(fileName: String, content: String, folder: String): Result<String>
 
     /**
      * The first note that already holds [url], or null.
@@ -43,10 +35,10 @@ interface VaultRepository {
     suspend fun findNote(url: String): SavedLink?
 
     /**
-     * Writes [bytes] next to the notes, replacing any file of that name.
+     * Writes [bytes] into [folder], beside its note, replacing any file of that name.
      * Used for pictures the note points at, because a remote link can expire. Returns the name written.
      */
-    suspend fun writeFile(fileName: String, mime: String, bytes: ByteArray): Result<String>
+    suspend fun writeFile(fileName: String, mime: String, bytes: ByteArray, folder: String): Result<String>
 
     /**
      * Every `.md` file in the folders the templates name, wherever it sits inside them.
