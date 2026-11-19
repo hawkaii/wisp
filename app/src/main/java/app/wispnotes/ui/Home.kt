@@ -90,7 +90,10 @@ fun HomeScreen(
         vm.rescan()
         onPauseOrDispose {}
     }
-    val notes = remember(all, sort) { NoteSort.apply(all.orEmpty(), sort) }
+    // Archived is the user's "hide this": the Library tab can still find them, Latest does not show them.
+    val notes = remember(all, sort) {
+        NoteSort.apply(all.orEmpty().filter { it.status != "archived" }, sort)
+    }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp),
