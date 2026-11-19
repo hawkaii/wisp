@@ -24,14 +24,14 @@ class DuplicatesTest {
     fun `the same url is found`() {
         val notes = listOf(note("a.md", "https://www.instagram.com/reel/ABC/", "Three articles"))
         val found = Duplicates.match(notes, "https://www.instagram.com/reel/ABC/")
-        assertEquals("a.md", found?.fileName)
+        assertEquals("a.md", found?.path)
         assertEquals("Three articles", found?.title)
     }
 
     @Test
     fun `tracking params do not make a new link`() {
         val notes = listOf(note("a.md", "https://www.instagram.com/reel/ABC/?igsh=xyz"))
-        assertEquals("a.md", Duplicates.match(notes, "https://www.instagram.com/reel/ABC/")?.fileName)
+        assertEquals("a.md", Duplicates.match(notes, "https://www.instagram.com/reel/ABC/")?.path)
     }
 
     @Test
@@ -54,5 +54,21 @@ class DuplicatesTest {
     @Test
     fun `a blank url never matches`() {
         assertNull(Duplicates.match(listOf(note("a.md", "https://example.com/a")), "   "))
+    }
+
+    @Test
+    fun `a clipped note is matched by the address it keeps in source`() {
+        val clipped = RawNote(
+            "Clippings/on-taste.md",
+            """
+            ---
+            title: "On taste"
+            source: "https://substack.com/p/on-taste"
+            ---
+            """.trimIndent(),
+        )
+        val found = Duplicates.match(listOf(clipped), "https://substack.com/p/on-taste?utm_source=share")
+        assertEquals("Clippings/on-taste.md", found?.path)
+        assertEquals("On taste", found?.title)
     }
 }

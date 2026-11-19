@@ -30,18 +30,18 @@ class LibraryViewModel(app: Application) : AndroidViewModel(app) {
     val minRating = MutableStateFlow<Int?>(null)
 
     fun rescan() = viewModelScope.launch {
-        Indexer.rescan({ repo.listInboxNotes() }, { dao.replaceAll(it) })
+        Indexer.rescan({ repo.listNotes() }, { dao.replaceAll(it) })
     }
 
     /** The user's own text, shown after they tried to recall. Empty when the file is gone. */
     suspend fun myNotes(fileName: String): String =
-        repo.editInboxNote(fileName) { it }.getOrNull()?.let(Sections::myNotes).orEmpty()
+        repo.editNote(fileName) { it }.getOrNull()?.let(Sections::myNotes).orEmpty()
 
     /** Sets the next review from the answer. The file is the truth; the index row follows it. */
     fun answer(entry: NoteEntry, recall: Recall) = viewModelScope.launch {
         val plan = Review.after(entry.reviewStep ?: 0, recall, LocalDate.now())
         val values = Review.planValues(plan)
         dao.put(entry.copy(nextReview = values["next_review"], reviewStep = plan.step)) // the card leaves at once
-        repo.editInboxNote(entry.fileName) { Frontmatter.set(it, values) }.onFailure { rescan() }
+        repo.editNote(entry.fileName) { Frontmatter.set(it, values) }.onFailure { rescan() }
     }
 }

@@ -8,7 +8,6 @@ import app.wispnotes.note.Source
 import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -33,21 +32,24 @@ class IndexTest {
         val fake = Fake(vault)
         fake.rescan()
         val first = fake.rows
-        assertEquals(listOf("2026-11-10-a.md", "2026-11-11-b.md"), first.map { it.fileName })
+        assertEquals(
+            listOf("2026-11-10-a.md", "2026-11-11-b.md", "readme.md", "other.md"),
+            first.map { it.fileName },
+        )
 
         fake.rows = emptyList() // index deleted
         fake.rescan()
         assertEquals(first, fake.rows)
     }
-
     @Test fun rescanFollowsTheFiles() {
         val fake = Fake(vault)
         fake.rescan()
         fake.files.removeAt(0) // deleted in Obsidian
         val archived = fake.files[0].content.replace("status: queued", "status: archived")
-        fake.files[0] = RawNote(fake.files[0].fileName, archived)
+        fake.files[0] = RawNote(fake.files[0].path, archived)
         fake.rescan()
-        assertEquals(listOf("archived"), fake.rows.map { it.status })
+        // readme.md and other.md are notes too now, so all three stay in the index.
+        assertEquals(listOf("archived", "queued", "queued"), fake.rows.map { it.status })
     }
 
     @Test fun readsFrontmatterIntoARow() {
@@ -60,7 +62,32 @@ class IndexTest {
         assertEquals("video,youtube", e.tags)
         assertEquals("done", e.extracted)
         assertEquals("2026-11-10", e.saved)
-        assertNull(NoteEntry.parse("n.md", "no frontmatter"))
+    }
+
+    @Test fun aNoteWithNoFrontmatterIsStillANote() {
+        val e = NoteEntry.parse("Clippings/essay.md", "# An essay\n\nbody")!!
+        assertEquals("Clippings/essay.md", e.fileName)
+        assertEquals("An essay", e.title)
+        assertEquals("obsidian", e.source)
+        assertEquals("note", e.type)
+        assertEquals("done", e.extracted) // a foreign note already has its text: never queue extraction
+    }
+
+    @Test fun aClippedNoteTakesItsSiteDateAndAddress() {
+        val clipped = """
+            ---
+            title: "On taste"
+            source: "https://substack.com/p/on-taste?utm_source=x"
+            created: 2026-11-01
+            tags: [taste, design]
+            ---
+            ## Notes
+        """.trimIndent()
+        val e = NoteEntry.parse("Clippings/on-taste.md", clipped)!!
+        assertEquals("substack.com", e.source)
+        assertEquals("2026-11-01", e.saved)
+        assertEquals("https://substack.com/p/on-taste?utm_source=x", e.url)
+        assertEquals("taste,design", e.tags)
     }
 
     @Test fun readsExtractionAttemptsForRetryLimit() {

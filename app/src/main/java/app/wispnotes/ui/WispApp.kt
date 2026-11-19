@@ -103,9 +103,11 @@ private fun MainScaffold(vm: MainViewModel, state: AppState) {
                 r == "whatnow" -> WhatNowScreen(onBack = { route = "" })
                 r == "settings" -> SettingsScreen(
                     vaultPath = state.vaultPath,
+                    noteFolder = state.noteFolder,
                     summariseReels = state.summariseReels,
                     metaLoggedIn = state.metaLoggedIn,
                     onChangeVault = { vm.pickVault(it); Thumbs.clear(); route = "" },
+                    onFolder = vm::setNoteFolder,
                     onSummarise = vm::setSummariseReels,
                     onLogin = { ctx.startActivity(ReaderActivity.loginIntent(ctx)) },
                     onBack = { route = "" },

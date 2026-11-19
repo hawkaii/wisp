@@ -28,14 +28,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Rebuilds the index from the vault files. Safe to run any time; the files are the truth. */
     fun rescan() = viewModelScope.launch {
-        Indexer.rescan({ repo.listInboxNotes() }) { entries ->
+        Indexer.rescan({ repo.listNotes() }) { entries ->
             dao.replaceAll(entries)
             Indexer.pending(entries).forEach { ExtractWorker.enqueue(getApplication(), it.fileName, replace = true) }
         }
     }
 
     fun retry(entry: NoteEntry) = viewModelScope.launch {
-        repo.editInboxNote(entry.fileName) {
+        repo.editNote(entry.fileName) {
             Frontmatter.set(it, mapOf("extracted" to "pending", "extract_attempts" to "0"))
         }.onSuccess {
             dao.put(entry.copy(extracted = "pending", extractAttempts = 0))
@@ -44,15 +44,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun start(entry: NoteEntry) = viewModelScope.launch {
-        repo.editInboxNote(entry.fileName) { Frontmatter.set(it, mapOf("status" to "in-progress")) }
+        repo.editNote(entry.fileName) { Frontmatter.set(it, mapOf("status" to "in-progress")) }
         dao.put(entry.copy(status = "in-progress"))
     }
 
     fun archive(entry: NoteEntry) = viewModelScope.launch {
         dao.put(entry.copy(status = "archived")) // the card leaves the list at once
-        repo.editInboxNote(entry.fileName) { Frontmatter.set(it, mapOf("status" to "archived")) }
+        repo.editNote(entry.fileName) { Frontmatter.set(it, mapOf("status" to "archived")) }
             .onFailure { rescan() } // file untouched: the next scan brings the card back
     }
 
-    suspend fun uriOf(entry: NoteEntry): Uri? = repo.inboxNoteUri(entry.fileName)
+    suspend fun uriOf(entry: NoteEntry): Uri? = repo.noteUri(entry.fileName)
 }
