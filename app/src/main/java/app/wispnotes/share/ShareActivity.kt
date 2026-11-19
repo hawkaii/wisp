@@ -54,6 +54,9 @@ import app.wispnotes.extract.OkHttpFetcher
 import app.wispnotes.note.Note
 import app.wispnotes.note.NoteDraft
 import app.wispnotes.note.Source
+import app.wispnotes.note.Template
+import app.wispnotes.note.TemplatePick
+import app.wispnotes.note.Templates
 import app.wispnotes.reader.MetaSettings
 import app.wispnotes.reader.ReaderActivity
 import app.wispnotes.reader.ReelAction
@@ -127,7 +130,18 @@ private fun SaveSheet(
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val info = remember(url) { Source.detect(url) }
+    /** Templates come from the vault; the built-ins are the fallback before a vault is chosen. */
+    var templates by remember { mutableStateOf(Templates.builtIn) }
+    var template by remember { mutableStateOf<Template?>(Templates.builtIn.firstOrNull()) }
     val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
+
+    LaunchedEffect(url) {
+        val loaded = withContext(Dispatchers.IO) {
+            repo.readTemplates().mapNotNull { (_, text) -> Template.fromJson(text).getOrNull() }
+        }.ifEmpty { Templates.builtIn }
+        templates = loaded
+        template = TemplatePick.pick(loaded, url)
+    }
 
     LaunchedEffect(url) {
         if (url.isBlank()) return@LaunchedEffect
@@ -164,7 +178,7 @@ private fun SaveSheet(
         duplicate = null
         if (!allowCopy && url.isNotBlank()) {
             // A failed lookup must never block a save, so it counts as "not saved yet".
-            val found = runCatching { repo.findInboxNote(url) }.getOrNull()
+            val found = runCatching { repo.findNote(url) }.getOrNull()
             if (found != null) {
                 duplicate = found
                 saving = false
@@ -182,8 +196,9 @@ private fun SaveSheet(
             return
         }
         val savedTitle = title.trim().ifEmpty { preview?.title ?: fallbackTitle(url) }
+        val chosen = template
         val draft = NoteDraft(info, url, savedTitle, LocalDate.now(), caption)
-        repo.writeInboxNote(Note.fileName(draft), Note.render(draft))
+        repo.writeNote(Note.fileName(draft, chosen), Note.render(draft, chosen))
             .onSuccess { name ->
                 if (url.isNotBlank()) ExtractWorker.enqueue(ctx, name)
                 title = savedTitle
@@ -243,7 +258,7 @@ private fun SaveSheet(
                     }
                     Text("Already saved.", style = MaterialTheme.typography.headlineMedium)
                     Text(dup.title, color = WispColors.Haze, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    Text(dup.fileName, color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(dup.path, color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 needLogin -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -276,6 +291,17 @@ private fun SaveSheet(
                     Text("${info.source} · ${info.type}", color = WispColors.Haze)
                     Preview(preview, loading = url.isNotBlank() && preview == null)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { info.tags.forEach { WispChip("#$it") } }
+                    if (templates.size > 1) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            templates.forEach { candidate ->
+                                WispChip(
+                                    label = candidate.name,
+                                    selected = candidate.name == template?.name,
+                                    onClick = { template = candidate },
+                                )
+                            }
+                        }
+                    }
                     Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(WispColors.Ink).padding(12.dp)) {
                         BasicTextField(
                             value = title,
@@ -325,7 +351,7 @@ private fun SaveSheet(
                 dup != null -> {
                     WispButton(
                         "Open the saved note",
-                        onClick = { ctx.startActivity(MainActivity.openNote(ctx, dup.fileName)); close() },
+                        onClick = { ctx.startActivity(MainActivity.openNote(ctx, dup.path)); close() },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     WispButton(

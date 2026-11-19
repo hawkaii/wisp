@@ -15,6 +15,8 @@ import app.wispnotes.index.NoteEntry
 import app.wispnotes.index.WispDb
 import app.wispnotes.note.Frontmatter
 import app.wispnotes.note.Source
+import app.wispnotes.note.Template
+import app.wispnotes.note.Templates
 import app.wispnotes.vault.SafVaultRepository
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -25,17 +27,27 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     override suspend fun doWork(): Result {
         val name = inputData.getString(KEY_FILE) ?: return Result.failure()
         val repo = SafVaultRepository(applicationContext)
-        val current = repo.editInboxNote(name) { it }.getOrElse { return Result.failure() }
+        val current = repo.editNote(name) { it }.getOrElse { return Result.failure() }
         val url = Frontmatter.text(current, "url") ?: return Result.failure()
+        // The template the note was saved with, or null for a note saved before templates existed.
+        // Read from the vault only when the note names one: no extra SAF work for plain notes.
+        val templateName = Frontmatter.text(current, "wisp_template")
+        val template = if (templateName == null) {
+            null
+        } else {
+            withContext(Dispatchers.IO) {
+                repo.readTemplates().mapNotNull { (_, text) -> Template.fromJson(text).getOrNull() }
+            }.ifEmpty { Templates.builtIn }.firstOrNull { it.name == templateName }
+        }
         val attempts = Frontmatter.text(current, "extract_attempts")?.toIntOrNull() ?: 0
         if (attempts >= MAX_ATTEMPTS) {
-            val failed = repo.editInboxNote(name) { Frontmatter.set(it, mapOf("extracted" to "failed")) }
+            val failed = repo.editNote(name) { Frontmatter.set(it, mapOf("extracted" to "failed")) }
                 .getOrElse { return Result.failure() }
             NoteEntry.parse(name, failed)?.let { WispDb.get(applicationContext).notes().put(it) }
             return Result.success()
         }
         val nextAttempt = attempts + 1
-        repo.editInboxNote(name) { Frontmatter.set(it, mapOf("extract_attempts" to nextAttempt.toString())) }
+        repo.editNote(name) { Frontmatter.set(it, mapOf("extract_attempts" to nextAttempt.toString())) }
             .getOrElse { return Result.failure() }
 
         var found = withContext(Dispatchers.IO) { Extractors.extract(url, OkHttpFetcher::get, OkHttpFetcher::post) }
@@ -54,7 +66,7 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         if (found.status == "failed" && nextAttempt < MAX_ATTEMPTS) return Result.retry()
 
         found = withContext(Dispatchers.IO) { keepPicture(repo, name, url, found) }
-        val updated = repo.editInboxNote(name) { Merge.apply(it, found) }.getOrElse { return Result.failure() }
+        val updated = repo.editNote(name) { Merge.apply(it, found, template) }.getOrElse { return Result.failure() }
         NoteEntry.parse(name, updated)?.let { WispDb.get(applicationContext).notes().put(it) }
         return Result.success()
     }
@@ -71,7 +83,7 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         if (Source.detect(url).source != "instagram") return found // the case with a signed link; other sources keep stable URLs
         val bytes = OkHttpFetcher.getBytes(remote) ?: return found
         val ext = Images.extension(bytes) ?: return found
-        val saved = repo.writeInboxFile(Images.fileName(noteFile, ext), Images.mime(ext), bytes)
+        val saved = repo.writeFile(Images.fileName(noteFile, ext), Images.mime(ext), bytes)
             .getOrNull() ?: return found
         Log.d(TAG, "stage=picture_kept file=$saved bytes=${bytes.size}")
         return found.copy(thumbnail = saved)

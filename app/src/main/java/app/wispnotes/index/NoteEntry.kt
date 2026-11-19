@@ -36,21 +36,37 @@ data class NoteEntry(
     companion object {
         private const val MAX_BODY = 20_000
 
-        /** Null when the file has no Wisp frontmatter (not our note). */
-        fun parse(fileName: String, content: String): NoteEntry? {
-            if (Frontmatter.text(content, "source") == null) return null
+        /** The first `YYYY-MM-DD` of a date property. A clipper may write a full timestamp after it. */
+        private val ISO_DATE = Regex("""\d{4}-\d{2}-\d{2}""")
+
+        /**
+         * One row from one file. [path] is the file's path relative to the vault root.
+         *
+         * A note Wisp wrote always has `source:`. A note the user wrote, or one the Obsidian Web
+         * Clipper wrote into `Clippings/`, may have none of Wisp's keys, so every field has a
+         * fallback: the title from the first `# ` heading, the source from the URL a clipper stores
+         * in `source:`, the date from `created` or `published`. Nothing is written back to the file.
+         */
+        fun parse(path: String, content: String): NoteEntry? {
+            val name = path.substringAfterLast('/')
+            val rawSource = Frontmatter.text(content, "source")
+            val url = Frontmatter.text(content, "url")
+                ?: rawSource?.takeIf { it.startsWith("http://") || it.startsWith("https://") }
+                ?: ""
             return NoteEntry(
-                fileName = fileName,
-                title = Frontmatter.text(content, "title") ?: fileName.removeSuffix(".md"),
-                source = Frontmatter.text(content, "source").orEmpty(),
-                type = Frontmatter.text(content, "type").orEmpty(),
-                url = Frontmatter.text(content, "url").orEmpty(),
+                fileName = path,
+                title = Frontmatter.text(content, "title") ?: heading(content) ?: name.removeSuffix(".md"),
+                source = sourceLabel(rawSource),
+                type = Frontmatter.text(content, "type") ?: "note",
+                url = url,
                 status = Frontmatter.text(content, "status") ?: "queued",
                 estMinutes = Frontmatter.text(content, "est_minutes")?.toIntOrNull(),
                 thumbnail = Frontmatter.text(content, "thumbnail"),
                 tags = Frontmatter.tags(content).joinToString(","),
-                saved = Frontmatter.text(content, "saved").orEmpty(),
-                extracted = Frontmatter.text(content, "extracted") ?: "pending",
+                saved = savedDate(content),
+                // A note with `extracted:` is ours and may still be waiting for the reader. A foreign
+                // note already contains its text, so it must not be queued for extraction.
+                extracted = Frontmatter.text(content, "extracted") ?: "done",
                 rating = Frontmatter.text(content, "rating")?.toIntOrNull(),
                 finished = Frontmatter.text(content, "finished"),
                 nextReview = Frontmatter.text(content, "next_review"),
@@ -59,15 +75,42 @@ data class NoteEntry(
                 body = Frontmatter.body(content).take(MAX_BODY),
             )
         }
+
+        /** The first `# Heading` in the body, which is how an Obsidian note usually names itself. */
+        private fun heading(content: String): String? =
+            Frontmatter.body(content).lineSequence()
+                .firstOrNull { it.startsWith("# ") }
+                ?.removePrefix("# ")?.trim()?.takeIf { it.isNotEmpty() }
+
+        /**
+         * A clipper often stores the page address in `source:`. A URL is a poor label on a card, so
+         * the note shows the site instead and keeps the address in `url:` for opening and duplicates.
+         */
+        private fun sourceLabel(raw: String?): String = when {
+            raw == null -> "obsidian"
+            raw.startsWith("http://") || raw.startsWith("https://") ->
+                runCatching { java.net.URI(raw).host?.removePrefix("www.") ?: raw }.getOrDefault(raw)
+            else -> raw
+        }
+
+        /** `saved:` first, because that one is ours. Then the two keys a clipper writes. */
+        private fun savedDate(content: String): String {
+            val raw = Frontmatter.text(content, "saved")
+                ?: Frontmatter.text(content, "created")
+                ?: Frontmatter.text(content, "published")
+                ?: return ""
+            return ISO_DATE.find(raw)?.value ?: raw
+        }
     }
 }
 
-class RawNote(val fileName: String, val content: String)
+/** One file from the vault: its path relative to the root, and its text. */
+class RawNote(val path: String, val content: String)
 
 object Indexer {
     /** Reads every note in the vault and replaces the whole index with them. */
     suspend fun rescan(read: suspend () -> List<RawNote>, replace: suspend (List<NoteEntry>) -> Unit) {
-        replace(read().mapNotNull { NoteEntry.parse(it.fileName, it.content) })
+        replace(read().mapNotNull { NoteEntry.parse(it.path, it.content) })
     }
 
     fun pending(entries: List<NoteEntry>): List<NoteEntry> = entries.filter { it.extracted == "pending" }

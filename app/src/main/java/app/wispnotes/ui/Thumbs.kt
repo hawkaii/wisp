@@ -26,7 +26,7 @@ object Thumbs {
         if (name.startsWith("http://") || name.startsWith("https://")) return name
         val app = LocalContext.current.applicationContext
         LaunchedEffect(name) {
-            if (!resolved.containsKey(name)) resolved[name] = SafVaultRepository(app).inboxNoteUri(name)
+            if (!resolved.containsKey(name)) resolved[name] = SafVaultRepository(app).noteUri(name)
         }
         return resolved[name]
     }

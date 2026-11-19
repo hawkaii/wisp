@@ -27,6 +27,8 @@ class ImagesTest {
     @Test fun pictureTakesTheNoteName() {
         assertEquals("2026-11-15-3-articles.jpg", Images.fileName("2026-11-15-3-articles.md", "jpg"))
         assertEquals("2026-11-15-3-articles.webp", Images.fileName("2026-11-15-3-articles.md", "webp"))
+        // A note is named by its path now; the picture still sits beside it, so the folder is dropped.
+        assertEquals("2026-11-15-3-articles.jpg", Images.fileName("Clippings/2026-11-15-3-articles.md", "jpg"))
     }
 
     @Test fun mimeMatchesTheExtension() {

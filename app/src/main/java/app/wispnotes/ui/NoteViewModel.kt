@@ -48,7 +48,7 @@ class NoteViewModel(app: Application) : AndroidViewModel(app) {
         if (ui.value?.fileName != fileName) ui.value = null
         missing.value = false
         lock.withLock {
-            repo.editInboxNote(fileName) { it }
+            repo.editNote(fileName) { it }
                 .onSuccess { show(fileName, it, resetNotes = true) }
                 .onFailure { missing.value = true }
         }
@@ -93,7 +93,7 @@ class NoteViewModel(app: Application) : AndroidViewModel(app) {
         val file = ui.value?.fileName ?: return@launch
         withContext(NonCancellable) {
             lock.withLock {
-                repo.editInboxNote(file) {
+                repo.editNote(file) {
                     Frontmatter.set(it, mapOf("extracted" to "pending", "extract_attempts" to "0", "transcript" to "pending"))
                 }.onSuccess { content ->
                     show(file, content, resetNotes = false)
@@ -114,7 +114,7 @@ class NoteViewModel(app: Application) : AndroidViewModel(app) {
         val text = notes.value
         withContext(NonCancellable) {
             lock.withLock {
-                repo.editInboxNote(file) { Frontmatter.set(Sections.withMyNotes(it, text), values) }
+                repo.editNote(file) { Frontmatter.set(Sections.withMyNotes(it, text), values) }
                     .onSuccess { show(file, it, resetNotes = false) }
             }
         }

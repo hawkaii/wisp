@@ -121,7 +121,7 @@ private fun ReaderScreen(noteFile: String, onClose: () -> Unit) {
 
     // The note is the truth about what to read; the caller only names the file.
     LaunchedEffect(noteFile) {
-        reel = SafVaultRepository(ctx).editInboxNote(noteFile) { it }
+        reel = SafVaultRepository(ctx).editNote(noteFile) { it }
             .getOrNull()?.let { Frontmatter.text(it, "url") }.orEmpty()
     }
 
@@ -393,7 +393,7 @@ private fun newMetaWebView(ctx: Context): WebView = WebView(ctx).apply {
 private suspend fun save(context: Context, noteFile: String, state: ReaderState): Boolean {
     val repo = SafVaultRepository(context)
     val links = state.links.map { AiLink(it.text, it.url) }
-    val updated = repo.editInboxNote(noteFile) { content ->
+    val updated = repo.editNote(noteFile) { content ->
         Frontmatter.set(Sections.withAi(content, state.answer, links, state.chatUrl), mapOf("ai" to "done"))
     }.getOrNull() ?: return false
     NoteEntry.parse(noteFile, updated)?.let { WispDb.get(context).notes().put(it) }
