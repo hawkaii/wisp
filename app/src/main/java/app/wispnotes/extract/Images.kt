@@ -29,6 +29,8 @@ object Images {
     /**
      * `2026-11-15-topic.md` -> `2026-11-15-topic.jpg`.
      * The image takes the note's name, so the two always travel together.
+     * The note is named by its path now, but a picture lives beside it, so the folder is dropped.
      */
-    fun fileName(noteFile: String, ext: String): String = noteFile.removeSuffix(".md") + "." + ext
+    fun fileName(noteFile: String, ext: String): String =
+        noteFile.substringAfterLast('/').removeSuffix(".md") + "." + ext
 }

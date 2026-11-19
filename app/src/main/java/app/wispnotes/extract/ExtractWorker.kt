@@ -25,17 +25,17 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     override suspend fun doWork(): Result {
         val name = inputData.getString(KEY_FILE) ?: return Result.failure()
         val repo = SafVaultRepository(applicationContext)
-        val current = repo.editInboxNote(name) { it }.getOrElse { return Result.failure() }
+        val current = repo.editNote(name) { it }.getOrElse { return Result.failure() }
         val url = Frontmatter.text(current, "url") ?: return Result.failure()
         val attempts = Frontmatter.text(current, "extract_attempts")?.toIntOrNull() ?: 0
         if (attempts >= MAX_ATTEMPTS) {
-            val failed = repo.editInboxNote(name) { Frontmatter.set(it, mapOf("extracted" to "failed")) }
+            val failed = repo.editNote(name) { Frontmatter.set(it, mapOf("extracted" to "failed")) }
                 .getOrElse { return Result.failure() }
             NoteEntry.parse(name, failed)?.let { WispDb.get(applicationContext).notes().put(it) }
             return Result.success()
         }
         val nextAttempt = attempts + 1
-        repo.editInboxNote(name) { Frontmatter.set(it, mapOf("extract_attempts" to nextAttempt.toString())) }
+        repo.editNote(name) { Frontmatter.set(it, mapOf("extract_attempts" to nextAttempt.toString())) }
             .getOrElse { return Result.failure() }
 
         var found = withContext(Dispatchers.IO) { Extractors.extract(url, OkHttpFetcher::get, OkHttpFetcher::post) }
@@ -54,7 +54,7 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         if (found.status == "failed" && nextAttempt < MAX_ATTEMPTS) return Result.retry()
 
         found = withContext(Dispatchers.IO) { keepPicture(repo, name, url, found) }
-        val updated = repo.editInboxNote(name) { Merge.apply(it, found) }.getOrElse { return Result.failure() }
+        val updated = repo.editNote(name) { Merge.apply(it, found) }.getOrElse { return Result.failure() }
         NoteEntry.parse(name, updated)?.let { WispDb.get(applicationContext).notes().put(it) }
         return Result.success()
     }
@@ -71,7 +71,7 @@ class ExtractWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         if (Source.detect(url).source != "instagram") return found // the case with a signed link; other sources keep stable URLs
         val bytes = OkHttpFetcher.getBytes(remote) ?: return found
         val ext = Images.extension(bytes) ?: return found
-        val saved = repo.writeInboxFile(Images.fileName(noteFile, ext), Images.mime(ext), bytes)
+        val saved = repo.writeFile(Images.fileName(noteFile, ext), Images.mime(ext), bytes)
             .getOrNull() ?: return found
         Log.d(TAG, "stage=picture_kept file=$saved bytes=${bytes.size}")
         return found.copy(thumbnail = saved)

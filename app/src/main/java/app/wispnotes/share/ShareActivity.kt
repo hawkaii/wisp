@@ -164,7 +164,7 @@ private fun SaveSheet(
         duplicate = null
         if (!allowCopy && url.isNotBlank()) {
             // A failed lookup must never block a save, so it counts as "not saved yet".
-            val found = runCatching { repo.findInboxNote(url) }.getOrNull()
+            val found = runCatching { repo.findNote(url) }.getOrNull()
             if (found != null) {
                 duplicate = found
                 saving = false
@@ -183,7 +183,7 @@ private fun SaveSheet(
         }
         val savedTitle = title.trim().ifEmpty { preview?.title ?: fallbackTitle(url) }
         val draft = NoteDraft(info, url, savedTitle, LocalDate.now(), caption)
-        repo.writeInboxNote(Note.fileName(draft), Note.render(draft))
+        repo.writeNote(Note.fileName(draft), Note.render(draft))
             .onSuccess { name ->
                 if (url.isNotBlank()) ExtractWorker.enqueue(ctx, name)
                 title = savedTitle
@@ -243,7 +243,7 @@ private fun SaveSheet(
                     }
                     Text("Already saved.", style = MaterialTheme.typography.headlineMedium)
                     Text(dup.title, color = WispColors.Haze, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                    Text(dup.fileName, color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(dup.path, color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 needLogin -> {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -325,7 +325,7 @@ private fun SaveSheet(
                 dup != null -> {
                     WispButton(
                         "Open the saved note",
-                        onClick = { ctx.startActivity(MainActivity.openNote(ctx, dup.fileName)); close() },
+                        onClick = { ctx.startActivity(MainActivity.openNote(ctx, dup.path)); close() },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     WispButton(

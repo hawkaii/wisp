@@ -27,8 +27,8 @@ import java.util.concurrent.TimeUnit
 class ReviewWorker(private val ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
     override suspend fun doWork(): Result {
         val today = LocalDate.now()
-        val due = SafVaultRepository(ctx).listInboxNotes()
-            .mapNotNull { NoteEntry.parse(it.fileName, it.content) }
+        val due = SafVaultRepository(ctx).listNotes()
+            .mapNotNull { NoteEntry.parse(it.path, it.content) }
             .count { it.isDue(today) }
         if (due > 0) notify(ctx, due)
         return Result.success()
