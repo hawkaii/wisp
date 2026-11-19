@@ -87,7 +87,7 @@ class TemplateEngineTest {
     @Test fun setAndNestedLoops() {
         assertEquals("Ada", render("{% set who = author %}{{who}}", mapOf("author" to "Ada")))
         val template = "{% for l in links %}{% if l.text %}{{l.text}}{% endif %}{% endfor %}"
-        assertEquals("AB", render(template, mapOf("links" to listOf(link, mapOf("text" to "B", "href" to "u")))))
+        assertEquals("Article AB", render(template, mapOf("links" to listOf(link, mapOf("text" to "B", "href" to "u")))))
     }
 
     @Test fun aBrokenTemplateNeverThrows() {

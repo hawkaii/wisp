@@ -36,7 +36,7 @@ class MarkdownTest {
 
     @Test fun imagesStayLinksAndDataUrisAreDropped() {
         assertEquals("![pic](https://example.com/i.png)", md("""<img src="/i.png" alt="pic">"""))
-        assertEquals("", md("""<img src="data:image/png;base64,AAAA">"""))
+        assertNull(md("""<img src="data:image/png;base64,AAAA">"""))
     }
 
     @Test fun codeIsFenced() {

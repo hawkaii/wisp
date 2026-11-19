@@ -172,12 +172,12 @@ object Markdown {
     private fun oneLine(text: String): String =
         tidy(text).lines().map(String::trim).filter(String::isNotEmpty).joinToString(" ")
 
-    /** Collapses the indentation HTML is full of, without touching intentional blank lines. */
+    /** Collapses the indentation HTML is full of, without touching the indentation Markdown needs
+     *  (a nested list) or intentional blank lines. */
     private fun tidy(text: String): String = text
         .replace("\r\n", "\n")
         .replace('\u00a0', ' ')
-        .replace(Regex("[ \\t]+"), " ")
-        .replace(Regex(" *\\n *"), "\n")
+        .replace(Regex("[ \\t]+\\n"), "\n") // trailing spaces only
         .replace(Regex("\\n{3,}"), "\n\n")
         .trim()
 }

@@ -72,7 +72,7 @@ data class Template(
 
         /** Never throws: a broken file in the vault must not stop a save. */
         fun fromJson(text: String): Result<Template> = runCatching {
-            val json = JSONObject(text)
+            val json = objectOf(text)
 
             val name = json.optString("name").trim()
             require(name.isNotEmpty()) { "A template needs a name." }
@@ -94,6 +94,13 @@ data class Template(
                 context = json.optString("context").ifBlank { null },
             )
         }
+
+        private fun objectOf(text: String): JSONObject =
+            runCatching { JSONObject(text) }.getOrElse {
+                // Some serialisers (PHP's json_encode, for one) escape "/" as "\/". That is valid
+                // JSON, but org.json rejects it, so retry once with the escapes removed.
+                JSONObject(text.replace("\\/", "/"))
+            }
 
         private fun propertiesOf(array: JSONArray?): List<TemplateProperty> {
             if (array == null) return emptyList()

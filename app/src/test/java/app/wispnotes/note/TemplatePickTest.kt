@@ -16,7 +16,7 @@ class TemplatePickTest {
     private val regex = Template(
         name = "GitHub",
         noteContentFormat = "{{content}}",
-        triggers = listOf("/^https:\\/\\/github\\.com\\/[^/]+\\/[^/]+\\$/"),
+        triggers = listOf("/^https:\\/\\/github\\.com\\/[^/]+\\/[^/]+${'$'}/"),
     )
     private val schema = Template(
         name = "Recipe",
@@ -31,7 +31,7 @@ class TemplatePickTest {
 
     @Test fun aRegexMatchesTheWholeUrl() {
         assertEquals("GitHub", TemplatePick.pick(all, "https://github.com/hawkaii/wisp")?.name)
-        assertFalse(TemplatePick.matches("/^https:\\/\\/github\\.com\\/[^/]+\\/[^/]+\\$/", "https://github.com/hawkaii"))
+        assertFalse(TemplatePick.matches("/^https:\\/\\/github\\.com\\/[^/]+\\/[^/]+${'$'}/", "https://github.com/hawkaii"))
     }
 
     @Test fun schemaMatchesTheTypesOnThePage() {
