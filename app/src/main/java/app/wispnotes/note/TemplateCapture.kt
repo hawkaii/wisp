@@ -214,6 +214,11 @@ object TemplatePick {
                 .getOrDefault(false)
         }
 
-        return url.startsWith(rule)
+        // A hand-written or imported trigger may omit `www.`; the shared link usually has it. Compare
+        // the two on equal footing so a template is not dead because of three characters.
+        return stripWww(url).startsWith(stripWww(rule))
     }
+
+    private fun stripWww(value: String): String =
+        value.replaceFirst("https://www.", "https://").replaceFirst("http://www.", "http://")
 }

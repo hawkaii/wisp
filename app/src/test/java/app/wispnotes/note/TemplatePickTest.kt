@@ -55,13 +55,28 @@ class TemplatePickTest {
     }
 
     /**
-     * The maker builds the trigger from the shared URL. This test copies that rule verbatim: if the
-     * two disagree, every template made from a share is dead on arrival.
+     * The maker builds the trigger from the shared URL. If the two disagree, every template made
+     * from a share is dead on arrival. This failed on main before the fix, which is why it is here.
      */
-    @Test fun `the trigger the maker writes matches its own link`() {
-        val url = "https://www.instagram.com/reel/ABC123/"
-        val host = java.net.URI(url).host.orEmpty().removePrefix("www.")
-        val trigger = "https://$host/"
-        assertTrue(TemplatePick.matches(trigger, url))
+    @Test fun `the maker's trigger matches the link it came from`() {
+        listOf(
+            "https://www.instagram.com/reel/ABC123/",
+            "https://www.threads.net/@someone/post/abc",
+            "https://www.youtube.com/watch?v=abc",
+            "https://www.reddit.com/r/notes/comments/abc/title/",
+            "https://example.com/a/b",
+        ).forEach { url ->
+            assertTrue(url, TemplatePick.matches(TemplateSeed.triggerFor(url), url))
+        }
     }
+
+    @Test fun `a trigger without www still matches a link with it`() {
+        assertTrue(TemplatePick.matches("https://instagram.com/", "https://www.instagram.com/reel/x"))
+        assertTrue(TemplatePick.matches("https://www.instagram.com/", "https://instagram.com/reel/x"))
+    }
+
+    @Test fun `the seed does not match a different site`() {
+        assertFalse(TemplatePick.matches(TemplateSeed.triggerFor("https://www.instagram.com/"), "https://www.threads.net/x"))
+    }
+
 }
