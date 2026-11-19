@@ -30,8 +30,14 @@ data class Template(
     fun fileName(): String = Note.slug(name) + ".json"
 
     /** True when the template cannot be rendered before the page is read. */
-    fun needsPage(): Boolean =
-        noteContentFormat.contains("{{content}}") || noteContentFormat.contains("{{transcript}}")
+    /**
+     * True when the template reads the page, so the save must wait for it.
+     *
+     * `{{transcript}}` is not here on purpose: a transcript is the app's own section, filled by the
+     * worker because the WebView path can take far longer than a share should wait. A template never
+     * places it.
+     */
+    fun needsPage(): Boolean = noteContentFormat.contains("{{content}}")
 
     /** The clipper's export shape and key order. */
     fun toJson(): String {

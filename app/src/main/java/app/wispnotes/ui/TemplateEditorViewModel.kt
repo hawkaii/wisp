@@ -58,6 +58,9 @@ class TemplateEditorViewModel(app: Application) : AndroidViewModel(app) {
     val reading = MutableStateFlow(false)
     val saved = MutableStateFlow(false)
 
+    /** The link this editor was opened from, so the share can be finished after saving. */
+    val seedUrl = MutableStateFlow("")
+
     fun open(file: String?, url: String, caption: String) = viewModelScope.launch {
         // The view model is activity-scoped, so a second visit must not inherit the last one's state.
         saved.value = false
@@ -65,6 +68,7 @@ class TemplateEditorViewModel(app: Application) : AndroidViewModel(app) {
         variables.value = null
         tab.value = TemplateTab.Form
         fileName.value = file
+        seedUrl.value = url
         val text = file?.let { repo.readTemplates().firstOrNull { pair -> pair.first == it }?.second }
         val seed = text ?: newTemplateJson(url)
         json.value = seed
@@ -190,7 +194,7 @@ class TemplateEditorViewModel(app: Application) : AndroidViewModel(app) {
      */
     private fun newTemplateJson(url: String): String {
         // The trigger must match the link it came from, so it is the link's own origin.
-        val trigger = TemplateSeed.triggerFor(url)
+        val triggers = TemplateSeed.triggersFor(url)
         val name = TemplateSeed.nameFor(url)
         return JSONObject().apply {
             put("schemaVersion", Template.SCHEMA_VERSION)
@@ -198,7 +202,7 @@ class TemplateEditorViewModel(app: Application) : AndroidViewModel(app) {
             put("behavior", "create")
             put("noteContentFormat", "{{content}}")
             put("properties", JSONArray())
-            put("triggers", JSONArray(if (trigger.isEmpty()) emptyList<String>() else listOf(trigger)))
+            put("triggers", JSONArray(triggers))
             put("noteNameFormat", "{{title}}")
             put("path", "Clippings")
         }.toString(2)

@@ -135,6 +135,11 @@ private fun MainScaffold(vm: MainViewModel, state: AppState) {
                     url = templateSeed?.first.orEmpty(),
                     caption = templateSeed?.second.orEmpty(),
                     onBack = { route = "templates" },
+                    onSaved = { link ->
+                        route = "templates"
+                        // The share was closed to get here, so hand the link back to it.
+                        if (link.isNotBlank()) ctx.startActivity(ShareActivity.intent(ctx, link))
+                    },
                 )
                 else -> Tabs(index, { index = it }, shared, onOpen = { route = "note:$it" }, onSettings = { route = "settings" }, onWhatNow = { route = "whatnow" })
             }

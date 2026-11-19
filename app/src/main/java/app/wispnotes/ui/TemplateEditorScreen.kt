@@ -64,6 +64,7 @@ fun TemplateEditorScreen(
     url: String,
     caption: String,
     onBack: () -> Unit,
+    onSaved: (String) -> Unit,
     vm: TemplateEditorViewModel = viewModel(),
 ) {
     BackHandler(onBack = onBack)
@@ -80,7 +81,8 @@ fun TemplateEditorScreen(
     var focus by remember { mutableStateOf<Field?>(null) }
 
     LaunchedEffect(file) { vm.open(file, url, caption) }
-    LaunchedEffect(saved) { if (saved) onBack() }
+    // A template made from a share ends by finishing that share, not by dropping the link.
+    LaunchedEffect(saved) { if (saved) onSaved(vm.seedUrl.value) }
 
     fun insert(variable: Variable) {
         val token = "{{${variable.name}}}"

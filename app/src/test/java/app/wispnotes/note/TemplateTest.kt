@@ -71,7 +71,8 @@ class TemplateTest {
 
     @Test fun thePageIsNeededOnlyForItsText() {
         assertTrue(Template(name = "x", noteContentFormat = "{{content}}").needsPage())
-        assertTrue(Template(name = "x", noteContentFormat = "{{title}}\n\n{{transcript}}").needsPage())
+        // A transcript is the app's section, filled by the worker: the save must not wait for it.
+        assertFalse(Template(name = "x", noteContentFormat = "{{title}}\n\n{{transcript}}").needsPage())
         assertFalse(Template(name = "x", noteContentFormat = "{{title}}").needsPage())
     }
 

@@ -66,7 +66,7 @@ class TemplatePickTest {
             "https://www.reddit.com/r/notes/comments/abc/title/",
             "https://example.com/a/b",
         ).forEach { url ->
-            assertTrue(url, TemplatePick.matches(TemplateSeed.triggerFor(url), url))
+            assertTrue(url, TemplateSeed.triggersFor(url).any { TemplatePick.matches(it, url) })
         }
     }
 
@@ -76,7 +76,20 @@ class TemplatePickTest {
     }
 
     @Test fun `the seed does not match a different site`() {
-        assertFalse(TemplatePick.matches(TemplateSeed.triggerFor("https://www.instagram.com/"), "https://www.threads.net/x"))
+        assertFalse(TemplateSeed.triggersFor("https://www.instagram.com/").any { TemplatePick.matches(it, "https://www.threads.net/x") })
     }
 
+
+    /** YouTube is shared as `youtu.be` from its app and as `youtube.com` from a browser. */
+    @Test fun `one youtube template matches both link shapes`() {
+        val triggers = TemplateSeed.triggersFor("https://youtu.be/ABC123")
+        listOf(
+            "https://youtu.be/ABC123",
+            "https://www.youtube.com/watch?v=ABC123",
+            "https://m.youtube.com/watch?v=ABC123",
+        ).forEach { url ->
+            assertTrue(url, triggers.any { TemplatePick.matches(it, url) })
+        }
+        assertFalse(triggers.any { TemplatePick.matches(it, "https://www.instagram.com/reel/x") })
+    }
 }
