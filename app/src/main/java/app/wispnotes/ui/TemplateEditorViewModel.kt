@@ -8,6 +8,7 @@ import app.wispnotes.extract.OkHttpFetcher
 import app.wispnotes.note.Capture
 import app.wispnotes.note.PropertyType
 import app.wispnotes.note.Template
+import app.wispnotes.note.TemplateSeed
 import app.wispnotes.vault.SafVaultRepository
 import app.wispnotes.vault.VaultRepository
 import kotlinx.coroutines.Dispatchers
@@ -188,9 +189,9 @@ class TemplateEditorViewModel(app: Application) : AndroidViewModel(app) {
      * something that will match the next share instead of an empty rule.
      */
     private fun newTemplateJson(url: String): String {
-        val host = runCatching { java.net.URI(url).host.orEmpty().removePrefix("www.") }.getOrDefault("")
-        val trigger = if (host.isEmpty()) "" else "https://$host/"
-        val name = host.substringBefore('.').replaceFirstChar { it.uppercase() }.ifEmpty { "New template" }
+        // The trigger must match the link it came from, so it is the link's own origin.
+        val trigger = TemplateSeed.triggerFor(url)
+        val name = TemplateSeed.nameFor(url)
         return JSONObject().apply {
             put("schemaVersion", Template.SCHEMA_VERSION)
             put("name", name)
