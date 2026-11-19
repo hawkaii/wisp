@@ -8,10 +8,19 @@ data class Extracted(
     val author: String? = null,
     val thumbnail: String? = null,
     val minutes: Int? = null,
+    /** The body as Markdown. See [Markdown]. */
     val text: String? = null,
     val transcript: List<TranscriptLine> = emptyList(),
     /** `done` has lines, `none` has no captions, null still needs the WebView fallback. */
     val transcriptStatus: String? = null,
+    /** Publisher name, for a template's `{{site}}`. */
+    val site: String? = null,
+    /** ISO timestamp the page says it was published, for `{{published}}`. */
+    val published: String? = null,
+    /** Page summary, for `{{description}}`. */
+    val description: String? = null,
+    /** schema.org `@type` values on the page, so a template can trigger on `schema:@Recipe`. */
+    val schemaTypes: List<String> = emptyList(),
 ) {
     /** done: a title and a length or text. partial: something. failed: nothing (link only). */
     val status: String

@@ -44,4 +44,11 @@ interface VaultRepository {
 
     /** Document Uri of `Inbox/[fileName]`, for opening it in another app. */
     suspend fun inboxNoteUri(fileName: String): Uri?
+
+    /**
+     * The JSON files in `Wisp/templates/`, as file name to text. Seeds the built-in templates on
+     * first use. Empty when there is no vault: callers fall back to
+     * [app.wispnotes.note.Templates.builtIn].
+     */
+    suspend fun readTemplates(): List<Pair<String, String>>
 }

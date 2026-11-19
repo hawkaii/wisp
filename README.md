@@ -12,7 +12,12 @@ Kiroween 2026, category **Resurrection**: a Pocket-style read-later app brought 
 
 _Screenshots go here (Home, Note, Review, Notes, Settings)._
 
-## Status: M3
+## Status: M4
+
+- Templates, in Obsidian Web Clipper's own JSON. `Wisp/templates/*.json` is seeded with **Article** and **Instagram reel** on first use, and an exported file imports into the clipper unchanged. The share sheet picks a template by its triggers (URL prefix, `/regex/`, or `schema:@Type`) and shows a chip to change it. A template sets the note name, adds frontmatter properties (`author`, `site`, `published`, `created`, `tags`, …) and shapes the body, which is written under the app-owned `## Text` section. The app's own keys (`title`, `url`, `type`, `source`, …) cannot be renamed by a template. Reels still go through Meta AI; the answer stays in `## AI`.
+- Page bodies are Markdown now (#14): headings, lists, links, quotes, code, tables and images survive the clip instead of collapsing into paragraphs.
+
+## M3
 
 - Note screen: Markdown body, editable `## My notes` (autosave, only that section is written), Start -> Finish. Finish needs 2 lines of notes first, then a 1-5 ghost rating.
 - Review tab: finished notes come back after 3, 7, 21 and 60 days. Recall first, then reveal, then Remembered / Fuzzy / Forgot. A daily notification (optional) says when something is due.

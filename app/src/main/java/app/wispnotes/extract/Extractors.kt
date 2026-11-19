@@ -21,7 +21,6 @@ object Extractors {
     private const val YOUTUBE_IOS_VERSION = "20.10.3"
     private const val FACEBOOK_UA = "facebookexternalhit/1.1"
     private val browser = mapOf("User-Agent" to BROWSER_UA, "Cookie" to "CONSENT=YES+1")
-    private const val MAX_TEXT = 50_000
 
     /** Never throws: any failure is an empty result, which the note records as `extracted: failed`. */
     fun extract(url: String, fetch: Fetch): Extracted = extract(url, fetch, { _, _, _ -> null })
@@ -141,16 +140,34 @@ object Extractors {
             thumbnail = doc.selectFirst("meta[property=og:image]")?.absUrl("content")?.ifEmpty { null }, // pages often give a relative path
             minutes = text?.let(::readingMinutes),
             text = text,
+            site = doc.meta("og:site_name"),
+            published = doc.meta("article:published_time"),
+            description = doc.meta("og:description") ?: doc.meta("description"),
+            schemaTypes = schemaTypes(doc),
         )
     }
 
-    /** shortcut: first `article`/`main` (else body) and its long paragraphs; swap for a real readability port if pages come out noisy. */
+    /**
+     * Main content as Markdown (#14): the root is chosen as before, but the body keeps its shape.
+     * Short paragraphs stay: they were dropped by the old paragraph-only pass, and on many pages the
+     * first line is a caption that belongs in the note.
+     */
     private fun readable(doc: Document): String? {
         doc.select("script,style,nav,header,footer,aside,form,noscript").remove()
         val root = doc.selectFirst("article") ?: doc.selectFirst("main") ?: doc.body()
-        val text = root.select("p").map { it.text().trim() }.filter { it.length >= 40 }.joinToString("\n\n")
-        return text.take(MAX_TEXT).ifBlank { null }
+        return Markdown.from(root)
     }
+
+    /** `@type` of every JSON-LD block, so `schema:@Recipe` triggers can match. */
+    private fun schemaTypes(doc: Document): List<String> =
+        doc.select("script[type=application/ld+json]").flatMap { script ->
+            val block = runCatching { JSONObject(script.data()) }.getOrNull() ?: return@flatMap emptyList()
+            when (val type = block.opt("@type")) {
+                is String -> listOf(type)
+                is JSONArray -> (0 until type.length()).mapNotNull { type.optString(it).takeIf(String::isNotBlank) }
+                else -> emptyList()
+            }
+        }.distinct()
 
     // ---- IMDb, Letterboxd --------------------------------------------------------------------
 

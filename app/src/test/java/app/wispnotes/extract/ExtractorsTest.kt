@@ -28,8 +28,11 @@ class ExtractorsTest {
         assertEquals("Jane Doe", a.author)
         assertEquals("https://example.com/img/cover.jpg", a.thumbnail)
         assertEquals(1, a.minutes)
-        assertTrue(a.text!!.startsWith("Memory is not a recording."))
-        assertFalse(a.text!!.contains("Short caption")) // too short to be body text
+        // #14: the body is Markdown now, so a page keeps its shape instead of becoming paragraphs.
+        assertTrue(a.text!!.startsWith("# How memory really works"))
+        assertTrue(a.text!!.contains("Short caption."))
+        assertTrue(a.text!!.contains("Memory is not a recording."))
+        assertEquals("Example Journal", a.site)
         assertFalse(a.text!!.contains("newsletter")) // nav
         assertFalse(a.text!!.contains("script content"))
         assertEquals("done", a.status)

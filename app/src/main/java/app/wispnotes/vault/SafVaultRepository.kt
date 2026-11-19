@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.documentfile.provider.DocumentFile
 import app.wispnotes.index.RawNote
+import app.wispnotes.note.Templates
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -125,6 +126,40 @@ class SafVaultRepository(context: Context) : VaultRepository {
 
     override suspend fun inboxNoteUri(fileName: String): Uri? = withContext(Dispatchers.IO) {
         inboxDir()?.findFile(fileName)?.uri
+    }
+
+    /**
+     * The JSON files in `Wisp/templates/`, seeding the built-ins on first use. They are real files
+     * in the vault, not a hidden string: the user can open one in Obsidian, and an export imports
+     * into the clipper.
+     */
+    override suspend fun readTemplates(): List<Pair<String, String>> = withContext(Dispatchers.IO) {
+        runCatching {
+            val uri = vaultUri.first() ?: return@runCatching emptyList<Pair<String, String>>()
+            val root = DocumentFile.fromTreeUri(ctx, uri) ?: return@runCatching emptyList<Pair<String, String>>()
+            val templates = dir(root, "templates")
+
+            if (templates.listFiles().none { it.isFile && it.name?.endsWith(".json") == true }) {
+                Templates.builtIn.forEach { template ->
+                    val file = runCatching { templates.createFile("application/json", template.fileName()) }.getOrNull()
+                    if (file != null) {
+                        runCatching {
+                            ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(template.toJson().toByteArray()) }
+                        }
+                    }
+                }
+            }
+
+            templates.listFiles()
+                .filter { it.isFile && it.name?.endsWith(".json") == true }
+                .sortedBy { it.name.orEmpty() }
+                .mapNotNull { file ->
+                    val text = runCatching {
+                        ctx.contentResolver.openInputStream(file.uri)?.use { it.readBytes().decodeToString() }
+                    }.getOrNull()
+                    if (text == null) null else file.name.orEmpty() to text
+                }
+        }.getOrDefault(emptyList())
     }
 
     private suspend fun inboxDir(): DocumentFile? {
