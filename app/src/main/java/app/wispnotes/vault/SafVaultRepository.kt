@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
 private val Context.store by preferencesDataStore("wisp")
 private val KEY_VAULT = stringPreferencesKey("vault_uri")
 private val KEY_ONBOARDED = booleanPreferencesKey("onboarded")
+private val KEY_SEEDED = stringPreferencesKey("seeded_vault")
 
 /** The folder an older install wrote into. Used once, to keep those notes visible after the upgrade. */
 private const val LEGACY_FOLDER = "Inbox"
@@ -170,17 +171,28 @@ class SafVaultRepository(context: Context) : VaultRepository {
         }.getOrDefault(emptyList())
     }
 
-    // A seed, not a fallback: a vault with any template file at all is never written to.
+    /**
+     * A seed, not a fallback: it runs once for a vault and never again.
+     *
+     * Without the marker, deleting every template would re-create one on the next resume, which is a
+     * fallback wearing a different name.
+     */
     override suspend fun ensureDefaultTemplate(): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
+            val vault = vaultUri.first()?.toString() ?: error("No vault chosen")
+            if (ctx.store.data.first()[KEY_SEEDED] == vault) return@runCatching
             val templates = templatesDir(create = true) ?: error("No vault chosen")
-            if (templates.listFiles().any { it.isFile && it.name?.endsWith(".json", ignoreCase = true) == true }) return@runCatching
+            if (templates.listFiles().any { it.isFile && it.name?.endsWith(".json", ignoreCase = true) == true }) {
+                ctx.store.edit { it[KEY_SEEDED] = vault }
+                return@runCatching
+            }
             val name = Template.DEFAULT_FILE
             templates.findFile(name)?.delete()
             val file = templates.createFile("application/json", name) ?: error("Cannot create $name")
             val seed = Template.default().copy(path = seedFolder())
             ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(seed.toJson().toByteArray()) }
                 ?: error("Cannot write $name")
+            ctx.store.edit { it[KEY_SEEDED] = vault }
         }
     }
 
