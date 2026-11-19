@@ -52,7 +52,7 @@ import app.wispnotes.reader.ReaderActivity
 import app.wispnotes.ui.theme.WispColors
 
 private enum class Tab(val label: String, val icon: Int) {
-    Home("Home", R.drawable.stk_cauldron),
+    Home("Latest", R.drawable.stk_cauldron),
     Review("Review", R.drawable.stk_calendar),
     Notes("Notes", R.drawable.stk_house),
 }

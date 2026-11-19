@@ -99,6 +99,9 @@ fun WispTheme(content: @Composable () -> Unit) {
 
 val Outline = BorderStroke(3.dp, Color.Black)
 
+/** The one radius every sticker uses. Clip content to it, or the picture covers the black outline. */
+val StickerShape = RoundedCornerShape(22.dp)
+
 /** Flat sticker card: thick dark outline and a hard drop edge, no blur. */
 @Composable
 fun WispCard(
@@ -106,7 +109,7 @@ fun WispCard(
     color: Color = WispColors.Purple,
     content: @Composable () -> Unit,
 ) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = StickerShape
     Box(
         modifier
             .drawBehind {
