@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.wispnotes.MainViewModel
 import app.wispnotes.reader.ReaderActivity
+import app.wispnotes.share.ShareActivity
 import app.wispnotes.ui.theme.WispColors
 
 private enum class Tab(val label: String, val icon: Int) {
@@ -135,6 +136,11 @@ private fun MainScaffold(vm: MainViewModel, state: AppState) {
                     url = templateSeed?.first.orEmpty(),
                     caption = templateSeed?.second.orEmpty(),
                     onBack = { route = "templates" },
+                    onSaved = { link ->
+                        route = "templates"
+                        // The share was closed to get here, so hand the link back to it.
+                        if (link.isNotBlank()) ctx.startActivity(ShareActivity.intent(ctx, link))
+                    },
                 )
                 else -> Tabs(index, { index = it }, shared, onOpen = { route = "note:$it" }, onSettings = { route = "settings" }, onWhatNow = { route = "whatnow" })
             }

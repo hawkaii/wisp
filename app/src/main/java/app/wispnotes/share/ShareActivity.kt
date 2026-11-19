@@ -1,5 +1,6 @@
 package app.wispnotes.share
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -82,6 +83,18 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /** Save sheet for ACTION_SEND text/plain. It writes one Markdown note into Inbox/. */
 class ShareActivity : ComponentActivity() {
+    companion object {
+        /**
+         * Reopens this sheet for [text]. A blocked share closes when the user goes to make a
+         * template, so the link has to come back once the template exists.
+         */
+        fun intent(ctx: Context, text: String): Intent =
+            Intent(ctx, ShareActivity::class.java)
+                .setAction(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_TEXT, text)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val text = intent.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
