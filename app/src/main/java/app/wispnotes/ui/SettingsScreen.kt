@@ -54,6 +54,7 @@ fun SettingsScreen(
     onFolder: (String) -> Unit,
     onSummarise: (Boolean) -> Unit,
     onLogin: () -> Unit,
+    onTemplates: () -> Unit,
     onBack: () -> Unit,
 ) {
     var sync by rememberSaveable { mutableStateOf(false) }
@@ -89,6 +90,15 @@ fun SettingsScreen(
                     Text("Vault", style = MaterialTheme.typography.titleMedium)
                     Text(vaultPath.ifEmpty { "No vault chosen" }, color = WispColors.Lavender)
                     WispButton("Change vault", { pick.launch(null) })
+                }
+                Card {
+                    Text("Templates", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "A template decides a note's name, folder, frontmatter and text. Files live in templates/ in your vault.",
+                        color = WispColors.Lavender,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    WispButton("Templates", onTemplates)
                 }
                 Card {
                     Text("Where new notes go", style = MaterialTheme.typography.titleMedium)

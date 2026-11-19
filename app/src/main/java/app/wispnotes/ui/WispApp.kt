@@ -88,6 +88,17 @@ private fun MainScaffold(vm: MainViewModel, state: AppState) {
         }
     }
 
+    // A blocked share can send the user here to make a template for that link.
+    var templateSeed by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val pendingTemplate by vm.pendingTemplate.collectAsStateWithLifecycle()
+    LaunchedEffect(pendingTemplate) {
+        pendingTemplate?.let { (url, caption) ->
+            templateSeed = url to caption
+            route = "template:"
+            vm.consumePendingTemplate()
+        }
+    }
+
     SharedTransitionLayout {
         AnimatedContent(
             targetState = route,
@@ -110,7 +121,21 @@ private fun MainScaffold(vm: MainViewModel, state: AppState) {
                     onFolder = vm::setNoteFolder,
                     onSummarise = vm::setSummariseReels,
                     onLogin = { ctx.startActivity(ReaderActivity.loginIntent(ctx)) },
+                    onTemplates = { route = "templates" },
                     onBack = { route = "" },
+                )
+                r == "templates" -> TemplatesScreen(
+                    onOpen = { file ->
+                        templateSeed = null
+                        route = "template:${file.orEmpty()}"
+                    },
+                    onBack = { route = "settings" },
+                )
+                r.startsWith("template:") -> TemplateEditorScreen(
+                    file = r.removePrefix("template:").takeIf { it.isNotEmpty() },
+                    url = templateSeed?.first.orEmpty(),
+                    caption = templateSeed?.second.orEmpty(),
+                    onBack = { route = "templates" },
                 )
                 else -> Tabs(index, { index = it }, shared, onOpen = { route = "note:$it" }, onSettings = { route = "settings" }, onWhatNow = { route = "whatnow" })
             }
