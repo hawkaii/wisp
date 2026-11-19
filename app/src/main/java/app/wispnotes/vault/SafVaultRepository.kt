@@ -9,7 +9,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.documentfile.provider.DocumentFile
 import app.wispnotes.index.RawNote
-import app.wispnotes.note.Templates
+import app.wispnotes.note.Template
+import app.wispnotes.note.TemplateFolders
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -19,10 +20,13 @@ import kotlinx.coroutines.withContext
 private val Context.store by preferencesDataStore("wisp")
 private val KEY_VAULT = stringPreferencesKey("vault_uri")
 private val KEY_ONBOARDED = booleanPreferencesKey("onboarded")
-private val KEY_FOLDER = stringPreferencesKey("note_folder")
+private val KEY_SEEDED = stringPreferencesKey("seeded_vault")
 
-/** Where new notes go until the user picks another folder. */
-const val DEFAULT_NOTE_FOLDER = "Inbox"
+/** The folder an older install wrote into. Used once, to keep those notes visible after the upgrade. */
+private const val LEGACY_FOLDER = "Inbox"
+
+/** The folder the app keeps template files in. */
+private const val TEMPLATE_FOLDER = "templates"
 
 /** Obsidian's own folders: they hold files, not notes the library should show. */
 private val SKIP_FOLDERS = setOf("Attachments", "Templates", "attachments", "templates")
@@ -58,7 +62,7 @@ class SafVaultRepository(context: Context) : VaultRepository {
                 val f = obsidian.createFile("application/json", "app.json") ?: error("Cannot create app.json")
                 ctx.contentResolver.openOutputStream(f.uri, "wt")?.use { it.write("{}".toByteArray()) }
             }
-            dir(vault, DEFAULT_NOTE_FOLDER)
+            dir(vault, TemplateFolders.DEFAULT)
             // The new folder sits under the picked tree, which already carries the persisted grant.
             setVault(vault.uri)
             vault.uri
@@ -75,18 +79,12 @@ class SafVaultRepository(context: Context) : VaultRepository {
         }
     }
 
-    override suspend fun noteFolder(): String = ctx.store.data.first()[KEY_FOLDER] ?: DEFAULT_NOTE_FOLDER
-
-    override suspend fun setNoteFolder(folder: String) {
-        ctx.store.edit { it[KEY_FOLDER] = clean(folder) }
-    }
-
-    override suspend fun writeNote(fileName: String, content: String): Result<String> =
+    override suspend fun writeNote(fileName: String, content: String, folder: String): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val root = vaultRoot() ?: error("No vault chosen")
-                val folder = noteFolder()
-                val target = folderOf(root, folder, create = true) ?: error("Cannot open $folder")
+                val where = clean(folder)
+                val target = folderOf(root, where, create = true) ?: error("Cannot open $where")
                 val base = fileName.removeSuffix(".md")
                 var name = fileName
                 var n = 2
@@ -95,15 +93,15 @@ class SafVaultRepository(context: Context) : VaultRepository {
                 val file = target.createFile("application/octet-stream", name) ?: error("Cannot create $name")
                 ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(content.toByteArray()) }
                     ?: error("Cannot write $name")
-                join(folder, name)
+                join(where, name)
             }
         }
 
-    override suspend fun writeFile(fileName: String, mime: String, bytes: ByteArray): Result<String> =
+    override suspend fun writeFile(fileName: String, mime: String, bytes: ByteArray, folder: String): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 val root = vaultRoot() ?: error("No vault chosen")
-                val target = folderOf(root, noteFolder(), create = true) ?: error("No vault chosen")
+                val target = folderOf(root, clean(folder), create = true) ?: error("No vault chosen")
                 // Replace, so a second extraction of the same note does not leave "-2", "-3" copies behind.
                 target.findFile(fileName)?.delete()
                 val file = target.createFile(mime, fileName) ?: error("Cannot create $fileName")
@@ -116,8 +114,16 @@ class SafVaultRepository(context: Context) : VaultRepository {
     // shortcut: reads every file in full over SAF on each scan; fine for hundreds of notes, read only the head if a vault gets huge.
     override suspend fun listNotes(): List<RawNote> = withContext(Dispatchers.IO) {
         val root = vaultRoot() ?: return@withContext emptyList()
+        // Only the folders templates name. The rest of the vault is the user's, not the library.
+        val folders = TemplateFolders.of(
+            readTemplates().mapNotNull { (_, text) -> Template.fromJson(text).getOrNull() },
+        )
         val out = ArrayList<RawNote>()
-        walk(root, "", out, 0)
+        for (folder in folders) {
+            val doc = root.findFile(folder)?.takeIf { it.isDirectory } ?: continue
+            walk(doc, "$folder/", out, 0)
+            if (out.size >= MAX_NOTES) break
+        }
         out
     }
 
@@ -147,29 +153,14 @@ class SafVaultRepository(context: Context) : VaultRepository {
     }
 
     /**
-     * The JSON files in `Wisp/templates/`, seeding the built-ins on first use. They are real files
-     * in the vault, not a hidden string: the user can open one in Obsidian, and an export imports
-     * into the clipper.
+     * The JSON files in `Wisp/templates/`. They are real files in the vault, not a hidden string:
+     * the user can open one in Obsidian, and an export imports into the clipper.
      */
     override suspend fun readTemplates(): List<Pair<String, String>> = withContext(Dispatchers.IO) {
         runCatching {
-            val uri = vaultUri.first() ?: return@runCatching emptyList<Pair<String, String>>()
-            val root = DocumentFile.fromTreeUri(ctx, uri) ?: return@runCatching emptyList<Pair<String, String>>()
-            val templates = dir(root, "templates")
-
-            if (templates.listFiles().none { it.isFile && it.name?.endsWith(".json") == true }) {
-                Templates.builtIn.forEach { template ->
-                    val file = runCatching { templates.createFile("application/json", template.fileName()) }.getOrNull()
-                    if (file != null) {
-                        runCatching {
-                            ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(template.toJson().toByteArray()) }
-                        }
-                    }
-                }
-            }
-
+            val templates = templatesDir(create = false) ?: return@runCatching emptyList<Pair<String, String>>()
             templates.listFiles()
-                .filter { it.isFile && it.name?.endsWith(".json") == true }
+                .filter { it.isFile && it.name?.endsWith(".json", ignoreCase = true) == true }
                 .sortedBy { it.name.orEmpty() }
                 .mapNotNull { file ->
                     val text = runCatching {
@@ -178,6 +169,86 @@ class SafVaultRepository(context: Context) : VaultRepository {
                     if (text == null) null else file.name.orEmpty() to text
                 }
         }.getOrDefault(emptyList())
+    }
+
+    /**
+     * A seed, not a fallback: it runs once for a vault and never again.
+     *
+     * Without the marker, deleting every template would re-create one on the next resume, which is a
+     * fallback wearing a different name.
+     */
+    override suspend fun ensureDefaultTemplate(): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val vault = vaultUri.first()?.toString() ?: error("No vault chosen")
+            if (ctx.store.data.first()[KEY_SEEDED] == vault) return@runCatching
+            val templates = templatesDir(create = true) ?: error("No vault chosen")
+            if (templates.listFiles().any { it.isFile && it.name?.endsWith(".json", ignoreCase = true) == true }) {
+                ctx.store.edit { it[KEY_SEEDED] = vault }
+                return@runCatching
+            }
+            val name = Template.DEFAULT_FILE
+            templates.findFile(name)?.delete()
+            val file = templates.createFile("application/json", name) ?: error("Cannot create $name")
+            val seed = Template.default().copy(path = seedFolder())
+            ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(seed.toJson().toByteArray()) }
+                ?: error("Cannot write $name")
+            ctx.store.edit { it[KEY_SEEDED] = vault }
+        }
+    }
+
+    /**
+     * Where the seeded template points.
+     *
+     * An install from before templates wrote into `Inbox/`. Seeding `Clippings/` would hide every one
+     * of those notes on the first launch after the upgrade, so the folder follows the notes that are
+     * already there. This runs once, when the templates folder is empty, and never again.
+     */
+    private suspend fun seedFolder(): String {
+        val root = runCatching { DocumentFile.fromTreeUri(ctx, vaultUri.first() ?: return TemplateFolders.DEFAULT) }.getOrNull()
+            ?: return TemplateFolders.DEFAULT
+        val inbox = root.findFile(LEGACY_FOLDER)?.takeIf { it.isDirectory } ?: return TemplateFolders.DEFAULT
+        val hasNotes = runCatching { inbox.listFiles().any { it.isFile && it.name?.endsWith(".md", ignoreCase = true) == true } }
+            .getOrDefault(false)
+        return if (hasNotes) LEGACY_FOLDER else TemplateFolders.DEFAULT
+    }
+
+    override suspend fun writeTemplate(fileName: String, text: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val name = templateFileName(fileName)
+                val templates = templatesDir(create = true) ?: error("No vault chosen")
+                templates.findFile(name)?.delete()
+                val file = templates.createFile("application/json", name) ?: error("Cannot create $name")
+                ctx.contentResolver.openOutputStream(file.uri, "wt")?.use { it.write(text.toByteArray()) }
+                    ?: error("Cannot write $name")
+                file.name ?: name
+            }
+        }
+
+    override suspend fun deleteTemplate(fileName: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val name = templateFileName(fileName)
+            val templates = templatesDir(create = false) ?: error("No vault chosen")
+            val file = templates.findFile(name) ?: error("$name not found")
+            require(file.delete()) { "Cannot delete $name" }
+        }
+    }
+
+    private suspend fun templatesDir(create: Boolean): DocumentFile? {
+        val root = vaultRoot() ?: return null
+        if (!create) return root.findFile(TEMPLATE_FOLDER)?.takeIf { it.isDirectory }
+        return dir(root, TEMPLATE_FOLDER)
+    }
+
+    /** A template file is a lowercase slug with `.json`: the name is also the template's id. */
+    private fun templateFileName(fileName: String): String {
+        require(fileName.endsWith(".json", ignoreCase = true)) { "A template file ends in .json." }
+        val slug = fileName.dropLast(5)
+            .lowercase()
+            .replace(Regex("[^a-z0-9-]+"), "-")
+            .trim('-')
+        require(slug.isNotEmpty()) { "A template needs a file name." }
+        return "$slug.json"
     }
 
     private suspend fun vaultRoot(): DocumentFile? {
@@ -225,8 +296,13 @@ class SafVaultRepository(context: Context) : VaultRepository {
             return folderOf(root, clean.substringBeforeLast('/'), create = false)
                 ?.findFile(clean.substringAfterLast('/'))
         }
-        folderOf(root, noteFolder(), create = false)?.findFile(clean)?.let { return it }
-        return folderOf(root, DEFAULT_NOTE_FOLDER, create = false)?.findFile(clean)
+        // A bare name is a picture beside its note. It lives in one of the template folders, so ask
+        // each of them rather than inventing a default.
+        val folders = TemplateFolders.of(readTemplates().mapNotNull { (_, text) -> Template.fromJson(text).getOrNull() })
+        for (folder in folders) {
+            folderOf(root, folder, create = false)?.findFile(clean)?.let { return it }
+        }
+        return null
     }
 
     private fun clean(folder: String) = folder.trim().trim('/')

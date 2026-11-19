@@ -29,6 +29,8 @@ data class Capture(
     val links: List<AiLink> = emptyList(),
     val chatUrl: String? = null,
     val selection: String = "",
+    /** What the user shared beside the link. Its own variable: it is not the page's text. */
+    val caption: String = "",
     val tags: List<String> = emptyList(),
 ) {
     val domain: String
@@ -52,6 +54,7 @@ data class Capture(
         "source" to source,
         "minutes" to (minutes ?: 0),
         "selection" to selection,
+        "caption" to caption,
         "tags" to tags,
         "links" to links.map { mapOf("text" to it.text, "href" to it.url) },
         "linksMd" to links.joinToString("\n") { "- [${it.text.ifBlank { it.url }}](${it.url})" },
@@ -66,9 +69,27 @@ data class Capture(
             date = draft.saved,
             type = draft.info.type,
             source = draft.info.source,
-            content = draft.caption,
+            // A caption is not the page text: it has its own variable and content waits for the page.
+            caption = draft.caption,
+            content = "",
             tags = draft.info.tags,
         )
+
+        /** The draft plus what the page already gave, for a template rendered at save time. */
+        fun of(draft: NoteDraft, found: Extracted?): Capture {
+            val base = of(draft)
+            if (found == null || found.status == "failed") return base
+            return base.copy(
+                title = found.title ?: base.title,
+                author = found.author,
+                site = found.site,
+                description = found.description,
+                published = found.published,
+                image = found.thumbnail,
+                content = found.text.orEmpty(),
+                minutes = found.minutes,
+            )
+        }
 
         /** The note as it stands plus what the extractor found. */
         fun of(content: String, found: Extracted, url: String): Capture = Capture(
@@ -172,13 +193,11 @@ object TemplateRender {
 
 /** Picks a template for a URL, the same way the clipper does. */
 object TemplatePick {
-    /** The first template whose trigger matches, else the first template (the fallback). */
-    fun pick(templates: List<Template>, url: String, schemaTypes: List<String> = emptyList()): Template? {
-        if (templates.isEmpty()) return null
-        return templates.firstOrNull { template ->
+    /** The first template whose trigger matches, or null when none does. No silent fallback. */
+    fun pick(templates: List<Template>, url: String, schemaTypes: List<String> = emptyList()): Template? =
+        templates.firstOrNull { template ->
             template.triggers.any { matches(it, url, schemaTypes) }
-        } ?: templates.first()
-    }
+        }
 
     /** `https://…` is a prefix, `/regex/` is a pattern, `schema:@Type` reads the page's JSON-LD. */
     fun matches(trigger: String, url: String, schemaTypes: List<String> = emptyList()): Boolean {

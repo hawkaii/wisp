@@ -45,7 +45,7 @@ class TemplateNoteTest {
         assertEquals("2026-11-19-memory.md", Note.fileName(draft()))
     }
 
-    @Test fun extractionRendersTheBodyIntoText() {
+    @Test fun extractionFillsAnEmptyText() {
         val found = Extracted(title = "Memory", author = "Jane Doe", site = "Example", text = "# How memory works\n\nBody.")
         val out = Merge.apply(Note.render(draft(), template), found, template)
 
@@ -54,6 +54,17 @@ class TemplateNoteTest {
         assertTrue(out.contains("## Text\n\n# How memory works\n\nBody."))
         assertEquals(1, Regex("## Text").findAll(out).count())
         assertEquals("done", Frontmatter.text(out, "extracted"))
+    }
+
+    @Test fun theBodyIsRenderedAtSaveAndNeverAgain() {
+        val page = Capture.of(draft()).copy(content = "# How memory works\n\nBody.")
+        val saved = Note.render(draft(), template, page)
+        assertTrue(saved.contains("## Text\n\n# How memory works\n\nBody."))
+
+        // Extraction must not rewrite what the user may have edited under `## Text`.
+        val out = Merge.apply(saved, Extracted(title = "Memory", text = "Another body from the page."), template)
+        assertTrue(out.contains("## Text\n\n# How memory works\n\nBody."))
+        assertFalse(out.contains("Another body from the page."))
     }
 
     @Test fun myNotesSurviveEveryRun() {
@@ -76,8 +87,8 @@ class TemplateNoteTest {
     }
 
     @Test fun templateHeadingsMoveOneLevelDown() {
-        val deeper = template.copy(noteContentFormat = "## Summary\n\n{{content}}")
-        val out = Merge.apply(Note.render(draft(), deeper), Extracted(title = "Memory", text = "Body."), deeper)
+        val deeper = template.copy(noteContentFormat = "## Summary\n\n{{title}}")
+        val out = Note.render(draft(), deeper)
         assertTrue(out.contains("### Summary"))
         assertFalse(out.contains("\n## Summary"))
     }

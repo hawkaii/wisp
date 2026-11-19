@@ -46,7 +46,7 @@ class TemplateTest {
         assertEquals("{{author}}", json.getJSONArray("properties").getJSONObject(0).getString("value"))
     }
 
-    @Test fun dailyBehaviorsDropTheNoteNameAndFolder() {
+    @Test fun defaultsAvoidTheNoteNameAndFolderWhenDaily() {
         val template = Template(name = "Daily", noteContentFormat = "x", behavior = TemplateBehavior.APPEND_DAILY)
         val json = JSONObject(template.toJson())
         assertFalse(json.has("noteNameFormat"))
@@ -54,14 +54,34 @@ class TemplateTest {
         assertEquals("append-daily", json.getString("behavior"))
     }
 
-    @Test fun defaultsAreClipperFiles() {
-        assertEquals(2, Templates.builtIn.size)
-        val article = JSONObject(Templates.article.toJson())
-        assertEquals("0.1.0", article.getString("schemaVersion"))
-        assertTrue(Templates.article.properties.any { it.name == "tags" })
-        assertTrue(Templates.reel.triggers.any { it.startsWith("https://www.instagram.com/reel/") })
-        // The first template is the fallback, as in the clipper.
-        assertEquals("Article", Templates.builtIn.first().name)
+    @Test fun aFolderIsOneName() {
+        val slash = Template.fromJson("""{"name":"x","noteContentFormat":"y","path":"Inbox/Notes"}""")
+        assertTrue(slash.isFailure)
+        assertTrue(slash.exceptionOrNull()!!.message!!.contains("no slashes"))
+        assertTrue(Template.fromJson("""{"name":"x","noteContentFormat":"y","path":"../Secrets"}""").isFailure)
+        assertTrue(Template.fromJson("""{"name":"x","noteContentFormat":"y","path":".hidden"}""").isFailure)
+    }
+
+    @Test fun onlyCreateIsSupported() {
+        val daily = Template.fromJson("""{"name":"x","noteContentFormat":"y","behavior":"append-daily"}""")
+        assertTrue(daily.isFailure)
+        assertEquals("Only behavior \"create\" is supported.", daily.exceptionOrNull()?.message)
+        assertTrue(Template.fromJson("""{"name":"x","noteContentFormat":"y","behavior":"nope"}""").isFailure)
+    }
+
+    @Test fun thePageIsNeededOnlyForItsText() {
+        assertTrue(Template(name = "x", noteContentFormat = "{{content}}").needsPage())
+        assertTrue(Template(name = "x", noteContentFormat = "{{title}}\n\n{{transcript}}").needsPage())
+        assertFalse(Template(name = "x", noteContentFormat = "{{title}}").needsPage())
+    }
+
+    @Test fun theDefaultTemplateIsAValidFile() {
+        val default = Template.default()
+        assertEquals("Default", default.name)
+        assertEquals("Clippings", default.path)
+        assertEquals("create", JSONObject(default.toJson()).getString("behavior"))
+        // The file the app seeds must read back as the same template.
+        assertEquals(default, Template.fromJson(default.toJson()).getOrThrow())
     }
 
     @Test fun aBrokenFileIsAFailureNotACrash() {
@@ -74,7 +94,7 @@ class TemplateTest {
         val template = Template.fromJson("""{"name":"x","noteContentFormat":"y"}""").getOrThrow()
         assertEquals(TemplateBehavior.CREATE, template.behavior)
         assertEquals("{{title}}", template.noteNameFormat)
-        assertEquals("Inbox", template.path)
+        assertEquals("Clippings", template.path)
     }
 
     @Test fun reservedKeysAreTheOnesTheIndexReads() {
