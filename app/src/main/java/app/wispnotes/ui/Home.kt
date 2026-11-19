@@ -1,22 +1,24 @@
 package app.wispnotes.ui
 
-import androidx.compose.foundation.background
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -25,16 +27,20 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -49,80 +55,113 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.wispnotes.R
 import app.wispnotes.index.NoteEntry
+import app.wispnotes.index.NoteSort
 import app.wispnotes.index.Picker
+import app.wispnotes.index.Sort
+import app.wispnotes.ui.theme.StickerShape
 import app.wispnotes.ui.theme.WispCard
 import app.wispnotes.ui.theme.WispColors
 import app.wispnotes.ui.theme.WispPanel
+import coil.compose.AsyncImage
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.launch
 
-/** Home is the queue: a pot, one main action, and the newest notes. */
+/**
+ * Home is the library as cards: two to a row, newest first by default, with the order one tap away.
+ *
+ * The order is a view preference ([ViewPrefs]), so changing it never rewrites a note. The cards come
+ * from the same index the Notes tab reads; the only difference is how they are drawn.
+ */
 @Composable
 fun HomeScreen(
     shared: Shared?,
     onOpen: (String) -> Unit,
     onSettings: () -> Unit,
     onWhatNow: () -> Unit,
-    vm: HomeViewModel = viewModel(),
+    vm: LibraryViewModel = viewModel(),
 ) {
-    val queue by vm.queue.collectAsStateWithLifecycle()
+    val all by vm.all.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var sort by remember { mutableStateOf(Sort.Latest) }
+    LaunchedEffect(Unit) { ViewPrefs.sort(ctx).collect { sort = it } }
     LifecycleResumeEffect(Unit) {
         vm.rescan()
         onPauseOrDispose {}
     }
-    val all = queue.orEmpty()
+    val notes = remember(all, sort) { NoteSort.apply(all.orEmpty(), sort) }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = 18.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Home", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            Text("Latest", style = MaterialTheme.typography.headlineMedium, modifier = Modifier.weight(1f))
+            Box(Modifier.size(48.dp).pressable(onClick = onWhatNow).semantics { contentDescription = "What now" }, contentAlignment = Alignment.Center) {
+                Icon(painterResource(R.drawable.stk_ghost), null, tint = Color.Unspecified, modifier = Modifier.size(32.dp))
+            }
             Box(Modifier.size(48.dp).pressable(onClick = onSettings).semantics { contentDescription = "Settings" }, contentAlignment = Alignment.Center) {
                 Icon(Icons.Filled.Settings, null, tint = WispColors.Lavender)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.stk_moon), null, tint = Color.Unspecified, modifier = Modifier.size(26.dp))
-            Text("Good evening", style = MaterialTheme.typography.bodySmall, color = WispColors.Lavender)
-        }
-        Text("Your pot", style = MaterialTheme.typography.headlineMedium)
-        PotCard(all)
-        WispButton("What now?", onWhatNow, Modifier.height(64.dp), leadingIcon = R.drawable.stk_ghost)
-        if (all.isEmpty()) {
-            Empty("Nothing queued yet.", "Share a link to Wisp from any app. It lands here as a note.")
-        } else {
-            WispCard(Modifier.fillMaxWidth(), color = WispColors.Ink) {
-                Column(Modifier.padding(horizontal = 14.dp, vertical = 6.dp)) {
-                    all.take(3).forEach { entry ->
-                        QueueRow(entry, onOpen = { onOpen(entry.fileName) }, onRetry = { vm.retry(entry) })
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Sort.entries.forEach { option ->
+                item(key = option.name) {
+                    WispChip(option.label, selected = option == sort) {
+                        sort = option
+                        scope.launch { ViewPrefs.setSort(ctx, option) }
                     }
+                }
+            }
+        }
+        when {
+            all == null -> Unit
+            notes.isEmpty() -> Empty("Nothing saved yet.", "Share a link to Wisp from any app. It lands here as a note.")
+            else -> LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 16.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(notes, key = { it.fileName }) { entry ->
+                    NoteCard(entry, onOpen = { onOpen(entry.fileName) }, modifier = Modifier.animateItem())
                 }
             }
         }
     }
 }
 
+/** One note as a sticker: picture on top, title and source under it. Two fit a row on a phone. */
 @Composable
-private fun PotCard(entries: List<NoteEntry>) {
-    val minutes = entries.sumOf { it.estMinutes ?: 0 }
-    WispCard(Modifier.fillMaxWidth(), color = WispColors.Purple) {
-        Box(Modifier.fillMaxWidth().padding(12.dp)) {
-            Icon(painterResource(R.drawable.stk_bat), null, tint = Color.Unspecified, modifier = Modifier.size(44.dp).align(Alignment.TopStart))
-            WispPanel(Modifier.fillMaxWidth()) {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.size(150.dp), contentAlignment = Alignment.Center) {
-                        Icon(painterResource(R.drawable.stk_cauldron), null, tint = Color.Unspecified, modifier = Modifier.fillMaxSize())
-                        Text(entries.size.toString(), style = MaterialTheme.typography.titleMedium, color = Color.White, modifier = Modifier.offset(y = 18.dp))
-                    }
-                    Text("${entries.size} brewing", style = MaterialTheme.typography.titleMedium)
-                    Text(totalMinutes(minutes), color = WispColors.Lavender, style = MaterialTheme.typography.bodySmall)
+private fun NoteCard(entry: NoteEntry, onOpen: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier.fillMaxWidth().pressable(onClick = onOpen), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        WispCard(Modifier.fillMaxWidth(), color = WispColors.Ink) {
+            Box(
+                Modifier.fillMaxWidth().aspectRatio(4f / 5f).clip(StickerShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                val image = Thumbs.model(entry)
+                if (image != null) {
+                    AsyncImage(image, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                } else {
+                    // No picture is normal: an article or a book has none. Show the mascot, not an empty box.
+                    Ghost(72.dp, float = false)
                 }
             }
-            Icon(painterResource(R.drawable.stk_pumpkin), null, tint = Color.Unspecified, modifier = Modifier.size(54.dp).align(Alignment.BottomEnd))
         }
+        Text(entry.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Text(label(entry), style = MaterialTheme.typography.bodySmall, color = WispColors.Lavender, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
-private fun totalMinutes(minutes: Int): String = if (minutes < 60) "about $minutes min" else "about ${minutes / 60} h ${minutes % 60} min"
+/** "instagram · 15 Nov", or just the source when the note has no date. */
+private fun label(entry: NoteEntry): String {
+    val date = runCatching { LocalDate.parse(entry.saved) }.getOrNull()
+        ?.format(DateTimeFormatter.ofPattern("d MMM")).orEmpty()
+    return listOf(entry.source, date).filter { it.isNotBlank() }.joinToString(" · ")
+}
 
 @Composable
 private fun QueueRow(entry: NoteEntry, onOpen: () -> Unit, onRetry: () -> Unit) {
