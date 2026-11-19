@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.wispnotes.MainViewModel
 import app.wispnotes.reader.ReaderActivity
+import app.wispnotes.share.ShareActivity
 import app.wispnotes.ui.theme.WispColors
 
 private enum class Tab(val label: String, val icon: Int) {
